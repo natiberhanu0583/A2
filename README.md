@@ -122,4 +122,6 @@ npm start
 - **push_subscriptions** — MySQL `push_subscriptions` ጠረጴዛ ውስጥ።
 - **ሌላው ሁሉም** (ቻት፣ ግዥ፣ ስቶክ፣ ቅርንጫፎች...) — MySQL `kv_data` ጠረጴዛ ውስጥ (እያንዳንዱ የመረጃ አይነት እንደ አንድ JSON ረድፍ)።
 #   a a  
+ #   a a  
+ #   A 2  
  
