@@ -1,0 +1,1941 @@
+<!DOCTYPE html>
+<html lang="am" dir="ltr">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#c9a84c" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>A2 Clothes — ERP System</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600&family=Noto+Sans+Ethiopic:wght@400;600;700&display=swap"
+    rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+  <!-- LOGIN SCREEN -->
+  <div id="loginScreen" class="login-screen active">
+    <div class="login-bg-anim">
+      <div class="orb orb1"></div>
+      <div class="orb orb2"></div>
+      <div class="orb orb3"></div>
+      <div class="orb orb4"></div>
+    </div>
+    <div class="login-particles">
+      <span class="particle p1"></span><span class="particle p2"></span>
+      <span class="particle p3"></span><span class="particle p4"></span>
+      <span class="particle p5"></span><span class="particle p6"></span>
+    </div>
+    <div class="login-center">
+      <div class="login-logo-wrap">
+        <div class="logo-circle-big">
+          <img src="logo.png" alt="A2"
+            onerror="this.style.display='none';this.parentElement.classList.add('img-failed');this.nextElementSibling.style.display='flex'" />
+          <span class="logo-letter-big" style="display:none">A2</span>
+        </div>
+        <div class="logo-ring-big r1"></div>
+        <div class="logo-ring-big r2"></div>
+      </div>
+      <h1 class="brand-title">A2 CLOTHES</h1>
+      <p class="brand-tagline" id="loginSubtitle">ERP Management System</p>
+      <div class="brand-divider"></div>
+      <div class="login-card-body">
+        <div class="lang-toggle-row">
+          <button class="lang-btn active" onclick="setLang('am')" id="langAmBtn">አማርኛ</button>
+          <button class="lang-btn" onclick="setLang('en')" id="langEnBtn">English</button>
+        </div>
+
+        <!-- Department Tabs -->
+        <div class="dept-tabs" id="deptTabs">
+          <button class="dept-tab active" onclick="selectDept('owner')" data-dept="owner">
+            <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2L3 7l9 5 9-5-9-5z" />
+              <path d="M3 12l9 5 9-5" />
+              <path d="M3 17l9 5 9-5" />
+            </svg>
+            <span id="tabOwner">ባለቤት</span>
+          </button>
+          <button class="dept-tab" onclick="selectDept('production')" data-dept="production">
+            <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            <span id="tabProduction">ምርት</span>
+          </button>
+          <button class="dept-tab" onclick="selectDept('sales')" data-dept="sales">
+            <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <path d="M16 10a4 4 0 01-8 0" />
+            </svg>
+            <span id="tabSales">ሽያጭ</span>
+          </button>
+          <button class="dept-tab" onclick="selectDept('hr')" data-dept="hr">
+            <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="9" cy="7" r="4" />
+              <path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2" />
+              <path d="M16 3.13a4 4 0 010 7.75" />
+              <path d="M21 21v-2a4 4 0 00-3-3.87" />
+            </svg>
+            <span id="tabHR">HR</span>
+          </button>
+          <button class="dept-tab" onclick="selectDept('procurement')" data-dept="procurement">
+            <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <path d="M16 10a4 4 0 01-8 0" />
+              <path d="M12 12v6" />
+              <path d="M9 15h6" />
+            </svg>
+            <span id="tabProcurement">ግዥ ክፍል</span>
+          </button>
+          <button class="dept-tab" onclick="selectDept('marketing')" data-dept="marketing">
+            <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 11l18-5v12L3 14v-3z" />
+              <path d="M11.6 16.8a3 3 0 11-5.8-1.6" />
+            </svg>
+            <span id="tabMarketing">ማርኬቲንግ</span>
+          </button>
+        </div>
+
+        <!-- Branch selector (only for sales) -->
+        <div class="branch-select-wrap hidden" id="branchSelectWrap">
+          <label class="lf-label" id="lblBranchSelect">ብራንች ይምረጡ</label>
+          <div class="lf-input-wrap">
+            <svg class="lf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+            <select class="branch-select lf-input" id="loginBranch" style="padding-left:38px">
+              <option value="">-- ብራንች ይምረጡ --</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="lf-field">
+          <label class="lf-label" id="lblUsername">የተጠቃሚ ስም</label>
+          <div class="lf-input-wrap">
+            <svg class="lf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+            </svg>
+            <input class="lf-input" type="text" id="loginUsername" autocomplete="off" placeholder="username" />
+          </div>
+        </div>
+        <div class="lf-field">
+          <label class="lf-label" id="lblPassword">የይለፍ ቃል</label>
+          <div class="lf-input-wrap">
+            <svg class="lf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            <input class="lf-input" type="password" id="loginPassword" placeholder="••••••••"
+              onkeydown="if(event.key==='Enter')doLogin()" />
+            <button class="lf-eye" onclick="togglePwdVis()" type="button">
+              <svg id="eyeOpen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16"
+                height="16">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <svg id="eyeClosed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16"
+                height="16" style="display:none">
+                <path
+                  d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                <line x1="1" y1="1" x2="23" y2="23" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div id="loginError" class="login-error hidden"></div>
+        <button class="lf-btn" onclick="doLogin()" id="loginBtn">
+          <span id="loginBtnText">ወደ ሲስተሙ ግባ</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
+        <p class="login-hint" id="loginHint">ፓስዋርድ ከረሱ ሃላፊዎን ያናግሩ</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="appShell" class="app-shell hidden">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sb-logo">
+          <div class="sb-logo-circle">
+            <img src="logo.png" alt="A2"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+            <span style="display:none">A2</span>
+          </div>
+          <div class="sb-logo-text">
+            <span class="sb-brand">A2 Clothes</span>
+            <span class="sb-tagline" id="sbTagline">ERP</span>
+          </div>
+        </div>
+        <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+      </div>
+      <div class="user-pill">
+        <div class="user-avatar" id="sidebarAvatar">?</div>
+        <div class="user-info">
+          <span class="user-name" id="sidebarUserName">--</span>
+          <span class="user-role" id="sidebarUserRole">--</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav" id="sidebarNav"></nav>
+      <div class="sidebar-footer">
+        <button class="sb-footer-btn" onclick="openEditMyInfo()">👤 <span id="sbEditInfo">መረጃዬን ቀይር</span></button>
+        <button class="sb-footer-btn" onclick="openChangePassword()">🔒 <span id="sbChgPwd">ፓስዋርድ ቀይር</span></button>
+        <button class="sb-footer-btn logout-btn" onclick="doLogout()">🚪 <span id="sbLogout">ውጣ</span></button>
+      </div>
+    </aside>
+
+    <main class="main-content" id="mainContent">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="topbar-menu-btn" onclick="toggleSidebar()">☰</button>
+          <h2 class="page-title" id="pageTitle">Dashboard</h2>
+        </div>
+        <div class="topbar-right">
+          <button class="lang-mini active" id="topLangAm" onclick="setLang('am')">አማ</button>
+          <button class="lang-mini" id="topLangEn" onclick="setLang('en')">EN</button>
+          <button id="notifBellBtn" class="topbar-menu-btn" title="ኖትፍኬሽን" onclick="toggleNotificationPermission()"
+            style="font-size:16px;position:relative">🔕</button>
+          <div class="topbar-clock" id="topbarClock"></div>
+          <div class="topbar-branch" id="topbarBranch"></div>
+        </div>
+      </header>
+      <div class="panel-container" id="panelContainer">
+
+        <!-- OWNER DASHBOARD -->
+        <section id="panel-dashboard" class="panel hidden">
+          <div class="dash-hero">
+            <div>
+              <div class="dash-hero-title" id="dashHeroTitle">እንኳን ደህና መጡ</div>
+              <div class="dash-hero-sub" id="dashHeroSub">የንግድዎ አጠቃላይ እይታ</div>
+            </div>
+            <div class="dash-hero-date" id="dashHeroDate"></div>
+          </div>
+
+          <div id="stockAlerts"></div>
+          <div id="wholesaleQueueDash"></div>
+
+          <div class="dash-kpis-hero" id="dashKpis"></div>
+
+          <div class="dash-section-label" id="dashChartsLabel">አጠቃላይ ትንተና</div>
+          <div class="charts-grid">
+            <div class="chart-card-compact">
+              <h3 class="card-title" id="dashSalesChartTitle">📈 የሽያጭ ሪፖርት</h3>
+              <div style="height:170px;position:relative"><canvas id="salesChart"></canvas></div>
+            </div>
+            <div class="chart-card-compact">
+              <h3 class="card-title" id="dashProductChartTitle">🥧 ምርቶች</h3>
+              <div style="height:170px;position:relative"><canvas id="productChart"></canvas></div>
+            </div>
+            <div class="chart-card-compact">
+              <h3 class="card-title" id="dashFlowChartTitle">🔄 የምርት ፍሰት</h3>
+              <div style="height:170px;position:relative"><canvas id="flowChart"></canvas></div>
+            </div>
+          </div>
+
+          <div class="dash-section-label" id="dashOpsLabel">ቅርንጫፍ እና ሪፖርት</div>
+          <div class="dash-row">
+            <div class="card" style="flex:1;min-width:260px">
+              <h3 class="card-title" id="dashBranchTitle">ቅርንጫፍ ሱቆች</h3>
+              <div id="branchList"></div>
+              <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+                <button class="btn-outline" onclick="navigateTo('branches')" style="font-size:12px">🗂️ ቅርንጫፍ
+                  ማኔጅመንት</button>
+              </div>
+            </div>
+            <div class="card" style="flex:1;min-width:260px">
+              <h3 class="card-title" id="dashReportTitle">ሪፖርቶች</h3>
+              <div class="report-btns" id="reportBtns"></div>
+            </div>
+          </div>
+          <!-- Procurement Category Card (owner only) -->
+          <div class="dash-row" id="procurementDashCard" style="display:none"></div>
+
+          <!-- Fixed Assets overview (owner only) -->
+          <div class="dash-row" id="assetsDashCard" style="display:none">
+            <div class="card" style="flex:1">
+              <div
+                style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+                <h3 class="card-title" style="margin:0">🏛️ ቋሚ ንብረቶች (ሁሉም ቅርንጫፎች)</h3>
+                <button class="btn-outline" onclick="navigateTo('assets')" style="font-size:12px;padding:6px 14px">🗂️
+                  ሁሉንም ይመልከቱ</button>
+              </div>
+              <div id="assetsDashSummary" class="dash-kpis" style="margin-bottom:12px"></div>
+              <div id="assetsDashList"></div>
+            </div>
+          </div>
+
+          <!-- Payment Channels Management (owner only) -->
+          <div class="dash-row" id="paymentChannelsCard" style="display:none">
+            <div class="card" style="flex:1">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <h3 class="card-title" style="margin:0">📲 የክፍያ ቻናሎች</h3>
+                <button class="btn-gold" onclick="openAddChannelModal()" style="font-size:12px;padding:6px 14px">+ ቻናል
+                  ጨምር</button>
+              </div>
+              <div id="paymentChannelsList"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- CUTTING -->
+        <!-- PRODUCTION (Cutting + Sewing + Store merged) -->
+        <section id="panel-production" class="panel hidden">
+          <div class="prod-subtabs"
+            style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:0;position:sticky;top:0;z-index:5;background:var(--navy)">
+            <button class="prod-subtab active" data-sub="cutting" onclick="switchProductionTab('cutting')"
+              style="padding:10px 18px;background:transparent;border:none;border-bottom:2px solid var(--gold);color:var(--gold);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">✂️
+              ቆረጣ ክፍል</button>
+            <button class="prod-subtab" data-sub="sewing" onclick="switchProductionTab('sewing')"
+              style="padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--white-dim);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">🪡
+              ስፌት ክፍል</button>
+            <button class="prod-subtab" data-sub="store" onclick="switchProductionTab('store')"
+              style="padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--white-dim);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">📦
+              ዕቃ ቤት</button>
+            <button class="prod-subtab" data-sub="prices" onclick="switchProductionTab('prices')"
+              style="padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--white-dim);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">💰
+              የልብስ ዋጋ</button>
+            <button class="prod-subtab" data-sub="wholesale" onclick="switchProductionTab('wholesale')"
+              style="padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--white-dim);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer"
+              id="wholesaleTab">🏪 የጅምላ ሽያጭ</button>
+          </div>
+
+          <section id="panel-cutting" class="prod-panel">
+            <div class="panel-toolbar">
+              <button class="btn-gold" onclick="cutOpenModal()" id="btnAddCutting">+ ቆረጣ ጨምር</button>
+              <button class="btn-outline" onclick="exportTablePDF('cutting')" id="btnExportCutting">📥 PDF</button>
+            </div>
+            <div id="cuttingStoreIncoming"></div>
+            <div id="cuttingRawCards"></div>
+            <!-- Period stats + bar chart -->
+            <div id="cuttingStats" style="margin-bottom:4px"></div>
+            <!-- Fabric stock report -->
+            <div id="cuttingFabricReport"></div>
+            <div class="card">
+              <div
+                style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+                <h3 class="card-title" style="margin:0">✂️ የቆረጣ መረጃ</h3>
+                <div style="display:flex;gap:6px;background:rgba(255,255,255,0.04);padding:4px;border-radius:10px">
+                  <button id="cutTabHistoryBtn" onclick="switchCuttingTab('history')"
+                    style="padding:6px 14px;font-size:12px;font-weight:700;font-family:inherit;border:none;border-radius:7px;cursor:pointer">📋
+                    ታሪክ</button>
+                  <button id="cutTabReportBtn" onclick="switchCuttingTab('report')"
+                    style="padding:6px 14px;font-size:12px;font-weight:700;font-family:inherit;border:none;border-radius:7px;cursor:pointer">📊
+                    ሙሉ ሪፖርት</button>
+                </div>
+              </div>
+              <div id="cuttingTabHistory">
+                <table class="data-table" id="cuttingTable">
+                  <thead id="cuttingThead"></thead>
+                  <tbody id="cuttingTbody"></tbody>
+                </table>
+              </div>
+              <div id="cuttingTabReport" style="display:none"></div>
+            </div>
+            <div class="card mt-16">
+              <h3 class="card-title" id="cuttingDmgTitle">የዳሜጅ መዝገብ</h3>
+              <table class="data-table" id="cuttingDmgTable">
+                <thead id="cuttingDmgThead"></thead>
+                <tbody id="cuttingDmgTbody"></tbody>
+              </table>
+              <button class="btn-outline mt-8" onclick="dmgOpenModal()" id="btnAddDmg">+ ዳሜጅ ጨምር</button>
+            </div>
+          </section>
+
+          <!-- SEWING -->
+          <section id="panel-sewing" class="prod-panel hidden">
+            <div class="panel-toolbar">
+              <button class="btn-gold" onclick="sewOpenModal()" id="btnAddSewing">+ ምዝገባ ጨምር</button>
+              <button class="btn-outline" onclick="openSewToStore()" id="btnSewToStore">📦 ወደ እቃ ቤት ላክ</button>
+              <button class="btn-outline" onclick="openSewDeptManage()" id="btnAddSewDept">🗂 ዘርፎችን አስተዳድር</button>
+              <button class="btn-outline" onclick="exportTablePDF('sewing')" id="btnExportSewing">📥 PDF</button>
+            </div>
+            <div id="sewingRawCards"></div>
+
+            <!-- Finished products ready to send to Store -->
+            <div class="card mt-0" style="padding:14px;margin-bottom:14px">
+              <div
+                style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+                <h3 class="card-title" style="margin:0">✅ የተጠናቀቁ ምርቶች (ለ እቃ ቤት ዝግጁ)</h3>
+                <button class="btn-gold" style="font-size:12px;padding:6px 14px" onclick="openSewToStore()">📦 ወደ እቃ ቤት
+                  ላክ</button>
+              </div>
+              <div id="sewReadyToSendCards"></div>
+            </div>
+
+            <!-- KPI + period stats -->
+            <div id="sewingStats"></div>
+
+            <!-- Worker management -->
+            <div class="card mt-0" style="padding:14px;margin-bottom:14px">
+              <div
+                style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+                <h3 class="card-title" style="margin:0">👥 ሰራተኞች</h3>
+                <button class="btn-gold" style="font-size:12px;padding:6px 14px" onclick="openSewWorkerModal()">+ ሰራተኛ
+                  ጨምር</button>
+              </div>
+              <div id="sewWorkerCards"></div>
+            </div>
+
+            <!-- Sent-to-Store history -->
+            <div class="card mt-16">
+              <h3 class="card-title">📦 ወደ እቃ ቤት የተላከ ታሪክ</h3>
+              <table class="data-table" id="sewToStoreTable">
+                <thead id="sewToStoreThead"></thead>
+                <tbody id="sewToStoreTbody"></tbody>
+              </table>
+            </div>
+
+            <!-- Full sewing record details (collapsible tab) -->
+            <div class="card mt-16">
+              <button onclick="toggleSewDetailTab()" id="sewDetailTabToggle"
+                style="width:100%;display:flex;align-items:center;justify-content:space-between;background:none;border:none;padding:0;cursor:pointer;font-family:inherit">
+                <h3 class="card-title" style="margin:0">📋 ሙሉ የስፌት ዝርዝር</h3>
+                <span id="sewDetailTabArrow" style="color:var(--gold);font-size:14px;transition:transform 0.2s">▼</span>
+              </button>
+              <div id="sewDetailTabBody" style="display:none;margin-top:12px">
+                <table class="data-table" id="sewDetailTable">
+                  <thead id="sewDetailThead"></thead>
+                  <tbody id="sewDetailTbody"></tbody>
+                </table>
+              </div>
+            </div>
+
+          </section>
+
+          <!-- STORE -->
+          <section id="panel-store" class="prod-panel hidden">
+            <div class="panel-toolbar">
+              <button class="btn-outline" onclick="openDispatchModal()">📤 ወደ ሱቅ ላክ</button>
+              <button class="btn-outline" onclick="exportTablePDF('store')">📥 PDF</button>
+            </div>
+            <div id="storeAlerts"></div>
+            <div id="storeProcIncoming"></div>
+            <div class="card mt-0" style="padding:14px;margin-bottom:14px">
+              <h3 class="card-title" style="margin:0 0 10px">🧵 ጥሬ እቃ — ወደ ቆረጣ ክፍል</h3>
+              <div id="storeRawStockCards"></div>
+            </div>
+            <div id="storeSewIncoming"></div>
+            <div class="card">
+              <h3 class="card-title">አጠቃላይ ክምችት (በዓይነት)</h3>
+              <div id="storeStockCards" class="stock-cards"></div>
+            </div>
+            <div class="card mt-16">
+              <h3 class="card-title">የዕቃ ዝርዝር</h3>
+              <table class="data-table" id="storeTable">
+                <thead id="storeThead"></thead>
+                <tbody id="storeTbody"></tbody>
+              </table>
+            </div>
+            <div class="card mt-16">
+              <h3 class="card-title">📦 ዝውውር — ሁኔታ እና ታሪክ</h3>
+              <div id="storeTransfersPanel" style="padding:4px 0"></div>
+            </div>
+          </section>
+
+          <section id="panel-prices" class="prod-panel hidden">
+            <div class="card" style="margin-bottom:16px">
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+                <h3 class="card-title" style="margin:0">💰 የልብስ ዋጋ ቁጥጥር</h3>
+                <button class="btn-gold" onclick="openAddPriceModal()">+ ምርት ጨምር</button>
+              </div>
+            </div>
+            <div id="priceList"></div>
+          </section>
+
+          <!-- WHOLESALE PANEL (inside production section) -->
+          <section id="panel-wholesale" class="prod-panel hidden">
+            <div id="wholesaleAlerts"></div>
+            <div id="wholesalePendingBanner"></div>
+            <div id="wholesaleApprovalQueue"></div>
+            <div class="card mt-16">
+              <h3 class="card-title">📋 የጅምላ ሽያጭ መዝገብ</h3>
+              <div style="overflow-x:auto">
+                <table class="data-table" id="wholesaleTable" style="min-width:700px">
+                  <thead id="wholesaleThead"></thead>
+                  <tbody id="wholesaleTbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <!-- SALES -->
+
+        <!-- SALES REPORT (sales staff page) -->
+        <section id="panel-salesreport" class="panel hidden">
+          <div style="margin-bottom:14px">
+            <div style="font-size:16px;font-weight:700;color:var(--gold-lt)">📊 የሽያጭ ሪፖርት</div>
+          </div>
+          <!-- Pending transfers for sales staff -->
+          <div id="salesPendingTransfersSection"></div>
+          <div class="card" style="margin-bottom:14px;padding:14px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+              <div style="font-size:12px;font-weight:600;color:var(--gold)">📅 ቀን ምረጥ</div>
+              <input type="date" id="posFilterDate" onchange="renderPOSByDate()"
+                style="padding:7px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.25);border-radius:8px;color:var(--white);font-family:inherit;font-size:12px;outline:none" />
+              <button onclick="document.getElementById('posFilterDate').value='';renderSalesReport()"
+                style="padding:5px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--white-dim);font-size:11px;cursor:pointer;font-family:inherit">ዛሬ</button>
+            </div>
+            <div id="posWeeklyKpis"></div>
+          </div>
+          <div class="card" style="padding:14px">
+            <div
+              style="font-size:12px;font-weight:600;color:rgba(197,203,216,0.5);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">
+              📋 ሽያጮች</div>
+            <div id="posTodaySales"></div>
+          </div>
+          <!-- Wholesale section for sales staff -->
+          <div id="salesReportWholesaleSection"></div>
+        </section>
+
+        <!-- CUSTOMERS -->
+        <!-- FINANCE -->
+        <section id="panel-finance" class="panel hidden">
+          <div class="prod-subtabs"
+            style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:0;position:sticky;top:0;z-index:5;background:var(--navy)">
+            <button class="prod-subtab active" data-sub="financemain" onclick="switchFinanceTab('financemain')"
+              style="padding:10px 18px;background:transparent;border:none;border-bottom:2px solid var(--gold);color:var(--gold);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">💵
+              ሒሳብ / ፋይናንስ</button>
+            <button class="prod-subtab" data-sub="sales" onclick="switchFinanceTab('sales')"
+              style="padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--white-dim);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">🛍️
+              ሽያጭ</button>
+          </div>
+
+          <section id="panel-financemain" class="prod-panel">
+            <div class="panel-toolbar">
+              <button class="btn-gold" onclick="openModal('expenseModal')" id="btnAddExpense">+ ወጪ ጨምር</button>
+              <button class="btn-outline" onclick="exportTablePDF('finance')">📥 PDF</button>
+            </div>
+            <div class="dash-kpis" id="financeKpis"></div>
+            <div class="card mt-16">
+              <h3 class="card-title" id="financeExpTitle">ወጪ መዝገብ</h3>
+              <table class="data-table" id="expenseTable">
+                <thead id="expenseThead"></thead>
+                <tbody id="expenseTbody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="panel-sales" class="prod-panel hidden">
+            <!-- POS / Cashier view for sales staff, normal view for owner -->
+            <div id="salesOwnerView">
+              <div class="panel-toolbar">
+                <button class="btn-gold" onclick="openSaleModal()" id="btnAddSale">+ ሽያጭ ጨምር</button>
+                <button class="btn-outline" onclick="exportTablePDF('sales')">📥 PDF</button>
+              </div>
+              <div id="salesAlerts"></div>
+              <div class="dash-kpis" id="salesKpis"></div>
+              <div class="card mt-16">
+                <h3 class="card-title">የዕቃ ክምችት (ሱቅ)</h3>
+                <div id="salesStockCards"></div>
+              </div>
+              <div class="card mt-16">
+                <h3 class="card-title">የሽያጭ መዝገብ</h3>
+                <table class="data-table" id="salesTable">
+                  <thead id="salesThead"></thead>
+                  <tbody id="salesTbody"></tbody>
+                </table>
+              </div>
+              <!-- Owner-only reports: hidden from sales staff via salesOwnerView -->
+              <div id="ownerWholesaleSection"></div>
+              <div id="ownerLoanSection"></div>
+            </div>
+
+            <!-- POS Cashier UI (sales staff only) -->
+            <div id="salesPosView" style="display:none">
+
+              <!-- Incoming transfer banner (filled by renderPOS) -->
+              <div id="posIncomingBanner"></div>
+
+              <!-- POS Header -->
+              <div
+                style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+                <div>
+                  <div style="font-size:16px;font-weight:700;color:var(--gold-lt)" id="posBranchName"></div>
+                  <div style="font-size:11px;color:var(--white-dim)" id="posDate"></div>
+                </div>
+                <!-- Tabs -->
+                <div
+                  style="display:flex;gap:0;border-radius:9px;overflow:hidden;border:1px solid rgba(201,168,76,0.2);background:rgba(0,0,0,0.2)">
+                  <button onclick="switchPosTab('sale')" id="posTabSale"
+                    style="padding:8px 16px;border:none;background:linear-gradient(135deg,var(--gold),#A87820);color:var(--navy);font-weight:700;font-size:12px;font-family:inherit;cursor:pointer">🛍️
+                    ሽያጭ</button>
+                  <button onclick="switchPosTab('refund')" id="posTabRefund"
+                    style="padding:8px 16px;border:none;background:transparent;color:var(--white-dim);font-weight:600;font-size:12px;font-family:inherit;cursor:pointer">🔄
+                    ሪፈንድ</button>
+                  <button onclick="switchPosTab('wholesale')" id="posTabWholesale"
+                    style="padding:8px 16px;border:none;background:transparent;color:var(--white-dim);font-weight:600;font-size:12px;font-family:inherit;cursor:pointer">🏪
+                    ጅምላ</button>
+                  <button onclick="switchPosTab('loan')" id="posTabLoan"
+                    style="padding:8px 16px;border:none;background:transparent;color:var(--white-dim);font-weight:600;font-size:12px;font-family:inherit;cursor:pointer">🤝
+                    ብድር</button>
+                </div>
+              </div>
+
+              <!-- SALE TAB -->
+              <div id="posSaleTab">
+                <!-- Search -->
+                <div style="position:relative;margin-bottom:12px">
+                  <svg
+                    style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:rgba(197,203,216,0.4);pointer-events:none"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input id="posSearchInput" oninput="posSearchQuery=this.value;renderPOSProducts()"
+                    placeholder="ምርት ፈልግ..."
+                    style="width:100%;padding:10px 14px 10px 36px;background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.18);border-radius:10px;color:var(--white);font-family:inherit;font-size:13px;outline:none;box-sizing:border-box" />
+                </div>
+
+                <!-- Products grid - full width, clean -->
+                <div id="posProductGrid"
+                  style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;padding-bottom:90px">
+                </div>
+              </div>
+
+              <!-- WHOLESALE TAB -->
+              <div id="posWholesaleTab" style="display:none;padding-bottom:30px">
+                <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px">🏪 የጅምላ ሽያጭ</div>
+                <div
+                  style="background:rgba(255,255,255,0.03);border:1px solid rgba(201,168,76,0.15);border-radius:13px;padding:16px">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                    <div>
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ነጋዴ /
+                        ደንበኛ ስም <span style="color:#FF9090">*</span></div>
+                      <input type="text" id="posWsCustomer" class="form-input" placeholder="ነጋዴው ስም"
+                        style="width:100%;box-sizing:border-box">
+                    </div>
+                    <div>
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ስልክ
+                      </div>
+                      <input type="tel" id="posWsPhone" class="form-input" placeholder="09..."
+                        style="width:100%;box-sizing:border-box">
+                    </div>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                    <div>
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ምርት
+                        <span style="color:#FF9090">*</span></div>
+                      <select id="posWsProduct" class="form-input" onchange="posWsUpdatePrice()"
+                        style="width:100%;box-sizing:border-box"></select>
+                    </div>
+                    <div>
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ብዛት
+                        <span style="color:#FF9090">*</span></div>
+                      <input type="number" id="posWsQty" class="form-input" min="1" placeholder="0"
+                        oninput="posWsUpdateTotal()" style="width:100%;box-sizing:border-box">
+                    </div>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                    <div>
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">💰 የጅምላ
+                        ዋጋ (በ1 ቁ.)</div>
+                      <div id="posWsPriceDisplay"
+                        style="padding:10px 14px;background:rgba(79,195,247,0.07);border:1px solid rgba(79,195,247,0.3);border-radius:8px;font-size:16px;font-weight:700;color:#4FC3F7">
+                        —</div>
+                      <div style="font-size:10px;color:rgba(197,203,216,0.4);margin-top:3px" id="posWsRetailRef"></div>
+                      <input type="hidden" id="posWsPrice">
+                    </div>
+                    <div>
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">አከፋፈል
+                      </div>
+                      <select id="posWsPayment" class="form-input" onchange="posWsTogglePayment()"
+                        style="width:100%;box-sizing:border-box">
+                        <option value="cash">💵 ጥሬ ገንዘብ</option>
+                        <option value="transfer">🏦 ዝውውር</option>
+                        <option value="credit">📒 ክሬዲት</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div id="posWsTransferRow" style="display:none;margin-bottom:10px">
+                    <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ባንክ / ቻናል
+                    </div>
+                    <input type="text" id="posWsTransferVia" class="form-input" placeholder="CBE, TeleBirr..."
+                      style="width:100%;box-sizing:border-box">
+                  </div>
+                  <div style="margin-bottom:14px">
+                    <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ማስታወሻ
+                    </div>
+                    <input type="text" id="posWsNote" class="form-input" placeholder="ምንም"
+                      style="width:100%;box-sizing:border-box">
+                  </div>
+                  <!-- Total display -->
+                  <div
+                    style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:9px;margin-bottom:14px">
+                    <span style="font-size:12px;color:var(--white-dim)">አጠቃላይ</span>
+                    <span style="font-size:18px;font-weight:700;color:var(--gold)" id="posWsTotal">—</span>
+                  </div>
+                  <div
+                    style="padding:8px 12px;background:rgba(255,167,38,0.08);border:1px solid rgba(255,167,38,0.3);border-radius:8px;font-size:11px;color:#FFA726;margin-bottom:14px">
+                    ⚠️ ጅምላ ሽያጭ ኦነሩ ካፀደቀ በኋላ ብቻ ይፈፀማል
+                  </div>
+                  <button onclick="posSubmitWholesale()"
+                    style="width:100%;padding:13px;border-radius:10px;border:none;background:linear-gradient(135deg,#FFA726,#E65100);color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">
+                    📤 ለኦነር ላክ
+                  </button>
+                </div>
+                <!-- My pending wholesale list -->
+                <div style="margin-top:16px" id="posWsPendingList"></div>
+              </div>
+
+              <!-- LOAN TAB (branch-to-branch borrowing) -->
+              <div id="posLoanTab" style="display:none;padding-bottom:30px">
+                <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px">🤝 ቅርንጫፍ ብድር</div>
+
+                <!-- Incoming loans awaiting my confirmation -->
+                <div id="loanIncomingBanner"></div>
+
+                <!-- Send loan form -->
+                <div
+                  style="background:rgba(255,255,255,0.03);border:1px solid rgba(201,168,76,0.15);border-radius:13px;padding:16px;margin-bottom:16px">
+                  <div style="font-size:12px;font-weight:700;color:rgba(197,203,216,0.5);margin-bottom:12px">📤 ብድር ላክ
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                    <div>
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ወደ የትኛው
+                        ቅርንጫፍ <span style="color:#FF9090">*</span></div>
+                      <select id="loanToBranch" class="form-input" style="width:100%;box-sizing:border-box"></select>
+                    </div>
+                    <div>
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ምርት
+                        <span style="color:#FF9090">*</span></div>
+                      <select id="loanProduct" class="form-input" onchange="loanCheckAvail()"
+                        style="width:100%;box-sizing:border-box"></select>
+                    </div>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                    <div>
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ብዛት
+                        <span style="color:#FF9090">*</span></div>
+                      <input type="number" id="loanQty" class="form-input" min="1" placeholder="0"
+                        oninput="loanCheckAvail()" style="width:100%;box-sizing:border-box">
+                      <div id="loanAvailHint" style="font-size:10px;color:var(--white-dim);margin-top:3px"></div>
+                    </div>
+                    <div>
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ማስታወሻ
+                      </div>
+                      <input type="text" id="loanNote" class="form-input" placeholder="ለምን ያስፈልጋል..."
+                        style="width:100%;box-sizing:border-box">
+                    </div>
+                  </div>
+                  <div
+                    style="padding:8px 12px;background:rgba(255,167,38,0.08);border:1px solid rgba(255,167,38,0.3);border-radius:8px;font-size:11px;color:#FFA726;margin-bottom:14px">
+                    ⚠️ ኦነሩ ካፀደቀ በኋላ ብቻ ይፈጸማል — ካፀደቀ በኋላ ከእርስዎ ቅርንጫፍ ይቀነስና ተቀባዩ ቅርንጫፍ ማረጋገጥ አለበት
+                  </div>
+                  <button onclick="submitBranchLoan()"
+                    style="width:100%;padding:13px;border-radius:10px;border:none;background:linear-gradient(135deg,#9C6ADE,#6A3FA0);color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">
+                    📤 ለኦነር ላክ
+                  </button>
+                </div>
+
+                <!-- My loan history -->
+                <div id="loanHistoryList"></div>
+              </div>
+
+              <!-- REFUND TAB -->
+              <div id="posRefundTab" style="display:none">
+                <div style="display:grid;grid-template-columns:1fr 320px;gap:14px;align-items:start">
+
+                  <!-- Refund Form -->
+                  <div class="card" style="padding:16px">
+                    <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px">🔄 ሪፈንድ ምዝገባ</div>
+
+                    <!-- Refund Type Toggle -->
+                    <div style="margin-bottom:14px">
+                      <div
+                        style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;letter-spacing:0.5px;margin-bottom:6px">
+                        የሪፈንድ ዓይነት</div>
+                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                        <button onclick="setRefundType('money')" id="rTypeMoney"
+                          style="padding:10px 6px;border-radius:9px;border:1.5px solid rgba(76,175,80,0.5);background:rgba(76,175,80,0.15);color:#80D080;font-size:12px;font-family:inherit;cursor:pointer;font-weight:700">
+                          💵 ሂሳብ ተመላሽ
+                        </button>
+                        <button onclick="setRefundType('exchange')" id="rTypeExchange"
+                          style="padding:10px 6px;border-radius:9px;border:1.5px solid rgba(255,255,255,0.1);background:transparent;color:var(--white-dim);font-size:12px;font-family:inherit;cursor:pointer;font-weight:600">
+                          🔁 እቃ ተቀየረ
+                        </button>
+                      </div>
+                      <input type="hidden" id="refundType" value="money" />
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                      <div>
+                        <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">የተሸጠበት
+                          ቀን <span style="color:#FF9090">*</span></div>
+                        <input type="date" id="refundSaleDate"
+                          style="width:100%;padding:9px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.25);border-radius:9px;color:var(--white);font-family:inherit;font-size:12px;outline:none;box-sizing:border-box" />
+                      </div>
+                      <div>
+                        <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">
+                          የተመለሰበት ቀን</div>
+                        <input type="date" id="refundDate"
+                          style="width:100%;padding:9px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:9px;color:var(--white);font-family:inherit;font-size:12px;outline:none;box-sizing:border-box" />
+                      </div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                      <div>
+                        <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">የተመለሰ
+                          ምርት</div>
+                        <select id="refundProduct" onchange="updateRefundPrice()"
+                          style="width:100%;padding:9px 10px;background:#1a1f2e;border:1px solid rgba(255,255,255,0.12);border-radius:9px;color:var(--white);font-family:inherit;font-size:12px;outline:none"></select>
+                      </div>
+                      <div>
+                        <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ብዛት
+                        </div>
+                        <input type="number" id="refundQty" min="1" value="1" onchange="updateRefundPrice()"
+                          style="width:100%;padding:9px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:9px;color:var(--white);font-family:inherit;font-size:12px;outline:none;box-sizing:border-box" />
+                      </div>
+                    </div>
+
+                    <!-- Exchange fields (hidden by default) -->
+                    <div id="refundExchangeFields"
+                      style="display:none;margin-bottom:10px;padding:10px;background:rgba(66,165,245,0.07);border-radius:9px;border:1px solid rgba(66,165,245,0.2)">
+                      <div style="font-size:11px;color:#90CAF9;font-weight:600;margin-bottom:8px">🔁 አዲስ እቃ</div>
+                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                        <div>
+                          <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">አዲስ
+                            ምርት</div>
+                          <select id="refundNewProduct" onchange="updateRefundDiff()"
+                            style="width:100%;padding:8px 10px;background:#1a1f2e;border:1px solid rgba(66,165,245,0.3);border-radius:8px;color:var(--white);font-family:inherit;font-size:12px;outline:none"></select>
+                        </div>
+                        <div>
+                          <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ብዛት
+                          </div>
+                          <input type="number" id="refundNewQty" min="1" value="1" onchange="updateRefundDiff()"
+                            style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(66,165,245,0.25);border-radius:8px;color:var(--white);font-family:inherit;font-size:12px;outline:none;box-sizing:border-box" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Financial summary -->
+                    <div id="refundFinancialSummary"
+                      style="margin-bottom:10px;padding:10px 12px;background:rgba(201,168,76,0.07);border-radius:9px;border:1px solid rgba(201,168,76,0.18)">
+                      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+                        <span style="color:var(--white-dim)">የተሸጠበት ዋጋ</span>
+                        <span id="rfOrigPrice" style="color:var(--white);font-weight:600">—</span>
+                      </div>
+                      <div id="rfNewPriceRow"
+                        style="display:none;justify-content:space-between;font-size:12px;margin-bottom:4px">
+                        <span style="color:var(--white-dim)">አዲስ ዋጋ</span>
+                        <span id="rfNewPrice" style="color:#90CAF9;font-weight:600">—</span>
+                      </div>
+                      <div
+                        style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;border-top:1px solid rgba(255,255,255,0.08);padding-top:6px;margin-top:4px">
+                        <span style="color:var(--gold)" id="rfDiffLabel">ሂሳብ ተመላሽ</span>
+                        <span id="rfDiffAmount" style="color:var(--gold)">—</span>
+                      </div>
+                    </div>
+
+                    <div style="margin-bottom:10px">
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">የደንበኛ ስም
+                      </div>
+                      <input type="text" id="refundCustomer" placeholder="ደንበኛ ስም..."
+                        style="width:100%;padding:9px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:9px;color:var(--white);font-family:inherit;font-size:12px;outline:none;box-sizing:border-box" />
+                    </div>
+                    <div style="margin-bottom:12px">
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ምክንያት
+                      </div>
+                      <input type="text" id="refundReason" placeholder="ለምን ተመለሰ?"
+                        style="width:100%;padding:9px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:9px;color:var(--white);font-family:inherit;font-size:12px;outline:none;box-sizing:border-box" />
+                    </div>
+                    <button onclick="saveRefund()" class="btn-gold" style="width:100%">✅ ሪፈንድ ምዝግብ</button>
+                    <p style="font-size:10px;color:rgba(197,203,216,0.3);margin-top:8px;text-align:center">⚠️ ሲመዘገብ ዕቃው
+                      ወደ ሱቁ ይመለሳል፣ ሂሳቡም ይስተካከላሉ</p>
+                  </div>
+
+                  <!-- History -->
+                  <div class="card" style="padding:14px">
+                    <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:10px">📋 የሪፈንድ ታሪክ</div>
+                    <div id="refundHistory" style="max-height:480px;overflow-y:auto"></div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </section>
+        </section>
+
+        <!-- HR -->
+        <!-- HR GROUP (Employee list + HR Report merged) -->
+        <section id="panel-hrgroup" class="panel hidden">
+          <div class="prod-subtabs"
+            style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:0;position:sticky;top:0;z-index:5;background:var(--navy)">
+            <button class="prod-subtab active" data-sub="hr" onclick="switchHRTab('hr')"
+              style="padding:10px 18px;background:transparent;border:none;border-bottom:2px solid var(--gold);color:var(--gold);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">👥
+              ሠራተኞች</button>
+            <button class="prod-subtab" data-sub="hrreport" onclick="switchHRTab('hrreport')"
+              style="padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--white-dim);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">📋
+              HR ሪፖርት</button>
+            <button class="prod-subtab" data-sub="customers" onclick="switchHRTab('customers')"
+              style="padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--white-dim);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">👤
+              ቋሚ ደንበኞች</button>
+          </div>
+
+          <section id="panel-hr" class="prod-panel">
+            <div class="panel-toolbar">
+              <button class="btn-gold" onclick="openModal('hrModal')" id="btnAddEmployee">+ ሰራተኛ ጨምር</button>
+              <button class="btn-outline" onclick="exportTablePDF('hr')">📥 PDF</button>
+            </div>
+            <div class="card">
+              <h3 class="card-title">የሰራተኛ ዝርዝር</h3>
+              <table class="data-table" id="hrTable">
+                <thead id="hrThead"></thead>
+                <tbody id="hrTbody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- HR REPORT (payroll cycle + attendance) -->
+          <section id="panel-hrreport" class="prod-panel hidden">
+            <div class="card">
+              <h3 class="card-title" id="hrAttTitle">ዛሬ ስራ ሂደት</h3>
+              <div id="attendanceList"></div>
+            </div>
+            <div class="card mt-16" id="payrollCycleSection"></div>
+          </section>
+
+          <section id="panel-customers" class="prod-panel hidden">
+            <div class="panel-toolbar">
+              <button class="btn-gold" onclick="openModal('customerModal')">+ ቋሚ ደንበኛ ጨምር</button>
+            </div>
+            <div class="card">
+              <h3 class="card-title">ቋሚ ደንበኞች</h3>
+              <div id="customerList"></div>
+            </div>
+          </section>
+        </section>
+
+        <!-- ATTENDANCE -->
+        <section id="panel-attendance" class="panel hidden">
+          <div class="attendance-hero">
+            <div class="att-clock" id="attClockDisplay">00:00:00</div>
+            <div class="att-date" id="attDateDisplay"></div>
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:8px">
+              <button class="att-checkin-btn" onclick="selfCheckIn()" id="btnSelfCheckIn">✅ ስራ ገባሁ</button>
+              <button class="att-checkin-btn" onclick="selfCheckOut()" id="btnSelfCheckOut"
+                style="background:linear-gradient(135deg,rgba(224,90,90,0.25),rgba(224,90,90,0.1));border-color:rgba(224,90,90,0.4);color:#FF9090;display:none">
+                🚪 ሥራ ወጣሁ
+              </button>
+            </div>
+            <div id="attStatus" class="att-status"></div>
+          </div>
+          <div class="card mt-16">
+            <h3 class="card-title" id="myAttHistTitle">የስራ ታሪክ</h3>
+            <table class="data-table" id="myAttTable">
+              <thead id="myAttThead"></thead>
+              <tbody id="myAttTbody"></tbody>
+            </table>
+          </div>
+        </section>
+
+
+        <!-- PROCUREMENT PANEL -->
+        <section id="panel-procurement" class="panel hidden">
+          <div
+            style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+            <h2 class="page-title" id="procurementTitle">ግዥ ክፍል</h2>
+            <button class="btn-gold hidden" id="procAddBtn" onclick="openModal('procurementModal')">＋ ግዥ ትዕዛዝ
+              ጨምር</button>
+          </div>
+          <div id="procPanel"></div>
+        </section>
+
+        <!-- PROCUREMENT MODAL -->
+        <div id="procurementModal" class="modal-overlay hidden"
+          onclick="if(event.target===this)closeModal('procurementModal')">
+          <div class="modal-box" style="max-width:460px">
+            <div class="modal-header">
+              <span id="procModalTitle">🛒 አዲስ የግዥ ትዕዛዝ</span>
+              <button class="modal-close" onclick="closeModal('procurementModal')">✕</button>
+            </div>
+            <div class="modal-body" style="padding:16px">
+
+              <!-- Row 1: item + date -->
+              <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:10px">
+                <div class="form-group" style="margin:0">
+                  <label class="form-label">ዕቃ ስም *</label>
+                  <input class="form-input" type="text" id="procItem" placeholder="ጥሬ እቃ ስም...">
+                </div>
+                <div class="form-group" style="margin:0;min-width:130px">
+                  <label class="form-label">ቀን</label>
+                  <input class="form-input" type="date" id="procDate">
+                </div>
+              </div>
+
+              <!-- Row 2: qty + unit + cost -->
+              <div style="display:grid;grid-template-columns:1fr 100px 1fr;gap:10px;margin-bottom:10px">
+                <div class="form-group" style="margin:0">
+                  <label class="form-label">ብዛት *</label>
+                  <input class="form-input" type="number" id="procQty" placeholder="0">
+                </div>
+                <div class="form-group" style="margin:0">
+                  <label class="form-label">መለኪያ</label>
+                  <select class="form-input" id="procUnit" style="padding-left:8px">
+                    <option value="meter">ሜትር</option>
+                    <option value="kg">ኪ.ግ</option>
+                    <option value="pcs">ቁርጥ</option>
+                    <option value="liter">ሊትር</option>
+                    <option value="roll">ሮል</option>
+                    <option value="unit">ዩኒት</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin:0">
+                  <label class="form-label">ዋጋ (ETB) *</label>
+                  <input class="form-input" type="number" id="procCost" placeholder="0">
+                </div>
+              </div>
+
+              <!-- Row 3: supplier + branch -->
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                <div class="form-group" style="margin:0">
+                  <label class="form-label">አቅራቢ</label>
+                  <input class="form-input" type="text" id="procSupplier" placeholder="አቅራቢ ስም...">
+                </div>
+                <div class="form-group" style="margin:0">
+                  <label class="form-label">ቅርንጫፍ *</label>
+                  <select class="form-input" id="procBranch"></select>
+                </div>
+              </div>
+
+              <!-- Note -->
+              <div class="form-group" style="margin:0">
+                <label class="form-label">ማስታወሻ</label>
+                <input class="form-input" type="text" id="procNote" placeholder="ተጨማሪ ማስታወሻ...">
+              </div>
+
+            </div>
+            <div class="modal-footer">
+              <button class="btn-outline" onclick="closeModal('procurementModal')">ሰርዝ</button>
+              <button class="btn-gold" onclick="saveProcurementOrder()">🛒 ትዕዛዝ ላክ</button>
+            </div>
+          </div>
+        </div>
+        <!-- REPORTS -->
+        <section id="panel-reports" class="panel hidden">
+          <div class="dash-section-label" id="reportCatLabel">ዓይነት ይምረጡ</div>
+          <div class="report-cat-grid" id="reportCatGrid"></div>
+          <div class="report-period-row" id="reportPeriodRow" style="display:none"></div>
+          <div id="reportContent" class="mt-16" style="max-height:58vh;overflow-y:auto;padding-right:6px"></div>
+        </section>
+
+        <!-- TEAM CHAT (group + 1:1 direct messages) -->
+        <section id="panel-chat" class="panel hidden">
+          <div class="card" style="display:flex;flex-direction:column;height:75vh;padding:0;overflow:hidden">
+            <div id="chatChips"
+              style="display:flex;gap:4px;overflow-x:auto;padding:12px 10px;border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0">
+            </div>
+            <div id="chatThreadHeader"
+              style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0;background:rgba(255,255,255,0.02)">
+            </div>
+            <div id="chatMessages" style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column">
+            </div>
+            <div id="chatRecordingBar" class="hidden"
+              style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid rgba(255,255,255,0.08);flex-shrink:0;background:rgba(224,90,90,0.08)">
+              <span
+                style="width:10px;height:10px;border-radius:50%;background:#E05A5A;animation:chatRecPulse 1s infinite"></span>
+              <span style="font-size:13px;color:var(--white);font-weight:600">🎤 <span
+                  id="chatRecTimer">0:00</span></span>
+              <span style="font-size:11.5px;color:var(--white-dim);flex:1">እየተቀዳ ነው...</span>
+              <button class="btn-outline" style="padding:6px 12px;font-size:12px"
+                onclick="cancelVoiceRecording()">ሰርዝ</button>
+              <button class="btn-gold" style="padding:6px 14px;font-size:12px;border-radius:20px"
+                onclick="stopVoiceRecording()">✔ ላክ</button>
+            </div>
+            <div id="chatInputBar"
+              style="display:flex;gap:8px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.08);flex-shrink:0;align-items:flex-end">
+              <input type="file" id="chatImageInput" accept="image/*" style="display:none"
+                onchange="handleChatImageSelect(event)">
+              <button class="btn-outline" title="ፎቶ ላክ" onclick="document.getElementById('chatImageInput').click()"
+                style="border-radius:50%;width:42px;height:42px;padding:0;font-size:17px;flex-shrink:0">📷</button>
+              <textarea id="chatInput" class="form-input" rows="1" placeholder="መልእክት ይጻፉ..."
+                onkeydown="handleChatKeydown(event)"
+                style="flex:1;resize:none;border-radius:20px;padding:10px 16px"></textarea>
+              <button id="chatMicBtn" class="btn-outline" title="ድምፅ ላክ" onclick="startVoiceRecording()"
+                style="border-radius:50%;width:42px;height:42px;padding:0;font-size:17px;flex-shrink:0">🎤</button>
+              <button class="btn-gold" onclick="sendChatMessage()"
+                style="border-radius:50%;width:42px;height:42px;padding:0;font-size:16px;flex-shrink:0">📤</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- PRIVATE NOTES (owner only) -->
+        <section id="panel-notes" class="panel hidden">
+          <div class="card" style="margin-bottom:18px;padding:0;overflow:hidden;border:1px solid rgba(201,168,76,0.25)">
+            <div
+              style="background:linear-gradient(135deg,rgba(201,168,76,0.14),rgba(201,168,76,0.03));padding:14px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(201,168,76,0.15)">
+              <div
+                style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--gold),#A87820);display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 3px 8px rgba(201,168,76,0.35)">
+                📝</div>
+              <div>
+                <div style="font-size:14.5px;font-weight:700;color:var(--white)">አዲስ ማስታወሻ</div>
+                <div style="font-size:10.5px;color:var(--white-dim)">የግል ማስታወሻዎን እዚህ ይመዝግቡ</div>
+              </div>
+            </div>
+            <div style="padding:16px 18px">
+              <textarea id="noteInput" class="form-input" rows="4" placeholder="✍️ ማስታወሻዎን እዚህ ይጻፉ..."
+                style="width:100%;resize:vertical;box-sizing:border-box;border-radius:12px;font-size:13.5px;line-height:1.5;padding:12px 14px"></textarea>
+              <div style="display:flex;justify-content:flex-end;margin-top:12px">
+                <button class="btn-gold" onclick="saveNote()"
+                  style="border-radius:10px;padding:9px 20px;font-weight:700;box-shadow:0 3px 10px rgba(201,168,76,0.3)">💾
+                  አስቀምጥ</button>
+              </div>
+            </div>
+          </div>
+          <div
+            style="font-size:11px;font-weight:700;color:rgba(197,203,216,0.45);letter-spacing:0.6px;margin:0 4px 10px">
+            🗂️ ያሉ ማስታወሻዎች</div>
+          <div id="notesList"></div>
+        </section>
+
+        <!-- FIXED ASSETS (branches register, only owner deletes) -->
+        <section id="panel-assets" class="panel hidden">
+          <div class="panel-toolbar">
+            <button class="btn-gold" onclick="openAssetModal()" id="btnAddAsset">+ ንብረት መዝግብ</button>
+          </div>
+          <div class="dash-kpis" id="assetsSummary" style="margin-bottom:16px"></div>
+          <div id="assetsList"></div>
+        </section>
+
+        <!-- MARKETING TEAM ACTIVITY LOG -->
+        <section id="panel-marketing" class="panel hidden">
+          <div class="panel-toolbar">
+            <button class="btn-gold" onclick="openMarketingLogModal()" id="btnAddMarketingLog">+ ስራ መዝግብ</button>
+          </div>
+          <div class="dash-kpis" id="marketingSummary" style="margin-bottom:16px"></div>
+          <div id="marketingList"></div>
+        </section>
+
+        <!-- BRANCH MANAGEMENT PANEL -->
+        <section id="panel-branches" class="panel hidden">
+          <div class="card" style="margin-bottom:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+              <h3 class="card-title" style="margin:0">🏪 ቅርንጫፍ ማኔጅመንት</h3>
+              <button class="btn-gold" onclick="openAddBranchFull()">+ ቅርንጫፍ ጨምር</button>
+            </div>
+          </div>
+          <div id="branchMgmtList"></div>
+        </section>
+
+        <!-- PRODUCT PRICES -->
+      </div>
+    </main>
+  </div>
+
+  <!-- ═══════ MODALS ═══════ -->
+
+  <!-- ADD BRANCH FULL MODAL -->
+  <div class="modal-overlay hidden" id="addBranchFullOverlay">
+    <div class="modal" style="max-width:520px;width:95%">
+      <h3 class="modal-title" id="addBranchFullTitle">ቅርንጫፍ ጨምር</h3>
+      <input type="hidden" id="abfEditId" value="" />
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="lf-field" style="grid-column:1/-1">
+          <label class="lf-label">የቅርንጫፍ ስም</label>
+          <input class="lf-input" id="abfName" placeholder="e.g. ቦሌ ቅርንጫፍ" style="padding:10px 14px" />
+        </div>
+        <div class="lf-field" style="grid-column:1/-1">
+          <label class="lf-label">አድራሻ / ቦታ</label>
+          <input class="lf-input" id="abfLocation" placeholder="e.g. Bole, Addis Ababa" style="padding:10px 14px" />
+        </div>
+      </div>
+      <div id="abfEmpSection" style="border-top:1px solid rgba(201,168,76,0.15);margin:14px 0 10px;padding-top:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h4 style="color:var(--gold);font-size:13px;margin:0">👤 የሽያጭ ሠራተኛ ጨምር (ከፈለጉ)</h4>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--white-dim);cursor:pointer">
+            <input type="checkbox" id="abfAddEmp" onchange="toggleBranchEmpFields()" style="accent-color:var(--gold)">
+            ሠራተኛ ጨምር
+          </label>
+        </div>
+        <div id="abfEmpFields"
+          style="display:none;background:rgba(255,255,255,0.03);border-radius:10px;padding:12px;border:1px solid rgba(201,168,76,0.1)">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="lf-field">
+              <label class="lf-label">ሙሉ ስም</label>
+              <input class="lf-input" id="abfEmpName" placeholder="ሙሉ ስም" style="padding:9px 12px" />
+            </div>
+            <div class="lf-field">
+              <label class="lf-label">ስልክ</label>
+              <input class="lf-input" id="abfEmpPhone" placeholder="09XXXXXXXX" style="padding:9px 12px" />
+            </div>
+            <div class="lf-field">
+              <label class="lf-label">የተጠቃሚ ስም (username)</label>
+              <input class="lf-input" id="abfEmpUser" placeholder="e.g. sales_bole" style="padding:9px 12px" />
+            </div>
+            <div class="lf-field">
+              <label class="lf-label">ፓስዋርድ</label>
+              <input class="lf-input" type="text" id="abfEmpPwd" placeholder="ፓስዋርድ" style="padding:9px 12px" />
+            </div>
+            <div class="lf-field">
+              <label class="lf-label">ደሞዝ (ETB)</label>
+              <input class="lf-input" type="number" id="abfEmpSalary" placeholder="5000" style="padding:9px 12px" />
+            </div>
+            <div class="lf-field">
+              <label class="lf-label">የጀመረበት ቀን</label>
+              <input class="lf-input" type="date" id="abfEmpStart" style="padding:9px 12px" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn-gold" onclick="saveAddBranchFull()" style="flex:1">አስቀምጥ</button>
+        <button class="modal-cancel" onclick="closeModal('addBranchFullOverlay')" style="flex:1">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT MY INFO -->
+  <div class="modal-overlay hidden" id="editMyInfoOverlay">
+    <div class="modal-box">
+      <h3 class="modal-title">👤 መረጃዬን ቀይር</h3>
+      <div class="form-group"><label>ስም</label><input type="text" id="editInfoName" /></div>
+      <div class="form-group"><label>የተጠቃሚ ስም (Username)</label><input type="text" id="editInfoUsername" /></div>
+      <div class="form-group"><label>ስልክ ቁጥር</label><input type="text" id="editInfoPhone" placeholder="ምንም" /></div>
+      <div class="form-group"><label>የአሁኑ ፓስዋርድ (ለማረጋገጫ) *</label><input type="password" id="editInfoConfirmPwd"
+          placeholder="ለውጡን ለማረጋገጥ ፓስዋርድዎን ያስገቡ" /></div>
+      <div id="editInfoError" class="login-error hidden"></div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveEditMyInfo()">አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('editMyInfoOverlay')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHANGE PASSWORD -->
+
+  <div class="modal-overlay hidden" id="changePwdOverlay">
+    <div class="modal-box">
+      <h3 class="modal-title">🔒 የይለፍ ቃል ቀይር</h3>
+      <div class="form-group"><label>የቀድሞ ፓስዋርድ</label><input type="password" id="oldPwd" /></div>
+      <div class="form-group"><label>አዲስ ፓስዋርድ</label><input type="password" id="newPwd" /></div>
+      <div class="form-group"><label>አዲሱን አረጋግጥ</label><input type="password" id="confPwd" /></div>
+      <div id="chgPwdError" class="login-error hidden"></div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveChangePassword()">አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('changePwdOverlay')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BRANCH ADD -->
+  <!-- ITEM ADDED TOAST -->
+  <div id="itemAddedToast" style="display:none;position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+  background:rgba(18,28,64,0.97);border:1px solid rgba(201,168,76,0.45);border-radius:14px;
+  padding:10px 18px;z-index:900;box-shadow:0 8px 32px rgba(0,0,0,0.55);
+  align-items:center;gap:10px;white-space:nowrap;pointer-events:none">
+    <span id="itemToastIcon" style="font-size:22px">👕</span>
+    <div>
+      <div id="itemToastName" style="font-size:13px;font-weight:700;color:var(--white)"></div>
+      <div id="itemToastPrice" style="font-size:11px;color:var(--gold)"></div>
+    </div>
+    <span style="font-size:16px;color:#4CAF50;font-weight:700;margin-left:4px">+1 ✓</span>
+  </div>
+  <style>
+    @keyframes toastSlideUp {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(14px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0)
+      }
+    }
+
+    .toast-visible {
+      display: flex !important;
+      animation: toastSlideUp 0.22s ease
+    }
+  </style>
+
+  <!-- BOTTOM CART BAR -->
+  <div id="bottomCartBar" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:800;
+  background:linear-gradient(135deg,#C9A84C 0%,#A87820 100%);
+  height:62px;padding:0 18px;
+  align-items:center;justify-content:space-between;
+  box-shadow:0 -4px 24px rgba(201,168,76,0.4);cursor:pointer" onclick="openCartModal()">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div
+        style="background:rgba(0,0,0,0.18);border-radius:9px;padding:5px 12px;display:flex;align-items:center;gap:5px">
+        <span style="font-size:17px">🛒</span>
+        <span id="barCartQty" style="font-size:16px;font-weight:800;color:#0B1634">0</span>
+      </div>
+      <span style="font-size:12px;font-weight:600;color:rgba(11,22,52,0.65)">ዕቃ ተመርጧል</span>
+    </div>
+    <span style="font-size:13px;font-weight:700;color:rgba(11,22,52,0.75)">ቅርጫት ክፈት →</span>
+    <div style="text-align:right">
+      <div style="font-size:10px;font-weight:600;color:rgba(11,22,52,0.55)">ጠቅላላ</div>
+      <div id="barCartTotal" style="font-size:15px;font-weight:800;color:#0B1634">0 ETB</div>
+    </div>
+  </div>
+
+  <!-- CART POPUP MODAL -->
+  <div id="cartModal" style="display:none;position:fixed;inset:0;z-index:1000;display:none">
+    <!-- Backdrop -->
+    <div onclick="closeCartModal()"
+      style="position:absolute;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px)"></div>
+    <!-- Panel slides from right -->
+    <div id="cartPanel" style="position:absolute;top:0;right:0;bottom:0;width:min(420px,100%);
+    background:var(--surface);border-left:1px solid rgba(201,168,76,0.2);
+    display:flex;flex-direction:column;transform:translateX(100%);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1);
+    box-shadow:-8px 0 40px rgba(0,0,0,0.5)">
+
+      <!-- Header -->
+      <div
+        style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,0.07)">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:18px">🛒</span>
+          <span style="font-size:15px;font-weight:700;color:var(--gold)">ቅርጫት</span>
+          <span id="cartModalBadge"
+            style="background:rgba(201,168,76,0.2);color:var(--gold);font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;border:1px solid rgba(201,168,76,0.3)">0
+            ዕቃ</span>
+        </div>
+        <button onclick="closeCartModal()"
+          style="background:rgba(255,255,255,0.06);border:none;color:var(--white-dim);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">✕</button>
+      </div>
+
+      <!-- Cart items - scrollable -->
+      <div id="posCart" style="flex:1;overflow-y:auto;padding:14px 18px"></div>
+
+      <!-- Totals -->
+      <div style="padding:0 18px 12px">
+        <div
+          style="background:rgba(201,168,76,0.07);border-radius:10px;padding:10px 14px;border:1px solid rgba(201,168,76,0.15)">
+          <div
+            style="display:flex;justify-content:space-between;font-size:12px;color:var(--white-dim);margin-bottom:4px">
+            <span>ብዛት</span><span id="posCartQty" style="font-weight:600;color:var(--white)">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;color:var(--gold)">
+            <span>ጠቅላላ</span><span id="posCartTotal">0 ETB</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payment -->
+      <div style="padding:0 18px 10px">
+        <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;letter-spacing:0.5px;margin-bottom:6px">
+          አከፋፈል</div>
+        <div id="posPaymentBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        <input type="hidden" id="posPayment" value="cash" />
+      </div>
+
+      <div id="posTransferWrap" style="display:none;padding:0 18px 10px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:4px">ቻናል</div>
+            <select id="posTransferVia" onchange="showChannelAccount(this.value)"
+              style="width:100%;padding:9px 10px;background:#1a1f2e;border:1px solid rgba(66,165,245,0.3);border-radius:8px;color:var(--white);font-family:inherit;font-size:13px;outline:none"></select>
+            <div id="posChannelAccountHint"
+              style="margin-top:5px;font-size:11px;color:#90CAF9;font-weight:600;min-height:16px;letter-spacing:0.3px">
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:4px">የደንበኛ ስም *</div>
+            <input id="posTransferCustomer" placeholder="ስም ይጻፉ..."
+              style="width:100%;padding:9px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(66,165,245,0.25);border-radius:8px;color:var(--white);font-family:inherit;font-size:13px;outline:none;box-sizing:border-box" />
+          </div>
+        </div>
+      </div>
+      <div id="posCreditWrap" style="display:none;padding:0 18px 10px">
+        <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:4px">የደንበኛ ስም</div>
+        <input id="posCreditName" placeholder="ደንበኛ ስም ይጻፉ..."
+          style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.25);border-radius:8px;color:var(--white);font-family:inherit;font-size:13px;outline:none;box-sizing:border-box" />
+      </div>
+
+      <!-- POS Regular Customer -->
+      <div style="padding:0 18px 8px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--white-dim)">
+          <input type="checkbox" id="posIsRegular" onchange="togglePosRegularCustomer(this.checked)"
+            style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer" />
+          <span>👤 ቋሚ ደንበኛ ነው?</span>
+        </label>
+        <div id="posRegCustDetails" style="display:none;margin-top:8px;display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+              <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:4px">ስም <span
+                  style="color:var(--gold)">*</span></div>
+              <input id="posRegCustName" placeholder="ሙሉ ስም..."
+                style="width:100%;padding:9px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.3);border-radius:8px;color:var(--white);font-family:inherit;font-size:13px;outline:none;box-sizing:border-box" />
+            </div>
+            <div>
+              <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:4px">ስልክ</div>
+              <input id="posRegCustPhone" placeholder="0912345678"
+                style="width:100%;padding:9px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.3);border-radius:8px;color:var(--white);font-family:inherit;font-size:13px;outline:none;box-sizing:border-box" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:0 18px 10px">
+        <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:4px">ማስታወሻ</div>
+        <input id="posNote" placeholder="..."
+          style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.07);border-radius:8px;color:var(--white);font-family:inherit;font-size:13px;outline:none;box-sizing:border-box" />
+      </div>
+
+      <!-- Actions -->
+      <div style="padding:0 18px 20px;display:flex;flex-direction:column;gap:8px">
+        <button onclick="posCheckout()" id="posCheckoutBtn"
+          style="width:100%;padding:14px;background:linear-gradient(135deg,var(--gold),#A87820);color:var(--navy);border:none;border-radius:11px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;letter-spacing:0.3px;transition:all 0.15s;box-shadow:0 4px 16px rgba(201,168,76,0.3)"
+          disabled>✅ ሽያጩን አጠናቅ</button>
+        <button onclick="posClearCart()"
+          style="width:100%;padding:9px;background:transparent;border:1px solid rgba(224,90,90,0.25);color:rgba(255,144,144,0.7);border-radius:9px;font-size:12px;font-family:inherit;cursor:pointer">🗑
+          ቅርጫት አጽዳ</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="priceModal">
+    <div class="modal" style="max-width:400px;width:95%">
+      <h3 class="modal-title" id="priceModalTitle">ዋጋ አስተካክል</h3>
+      <input type="hidden" id="priceEditType" />
+      <div class="lf-field" style="margin-bottom:12px">
+        <label class="lf-label">የልብስ ዓይነት</label>
+        <input class="lf-input" id="priceTypeName" placeholder="e.g. ሸሚዝ" style="padding:10px 14px" />
+      </div>
+      <div class="lf-field" style="margin-bottom:12px">
+        <label class="lf-label">የችርቻሮ ዋጋ (ETB)</label>
+        <input class="lf-input" type="number" id="priceAmount" placeholder="0.00" style="padding:10px 14px" />
+      </div>
+      <div class="lf-field" style="margin-bottom:16px">
+        <label class="lf-label">💰 የጅምላ ዋጋ (ETB) <span style="font-size:10px;color:rgba(197,203,216,0.5)">— ባዶ ከተወ ጅምላ
+            አይፈቀድም</span></label>
+        <input class="lf-input" type="number" id="priceWholesaleAmount" placeholder="0.00" style="padding:10px 14px" />
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn-gold" onclick="savePrice()" style="flex:1">አስቀምጥ</button>
+        <button class="modal-cancel" onclick="closeModal('priceModal')" style="flex:1">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="channelModal">
+    <div class="modal-box" style="max-width:360px">
+      <h3 class="modal-title">📲 አዲስ ቻናል ጨምር</h3>
+      <div class="form-group">
+        <label>የቻናል ስም (CBE, Telebirr, Amole...)</label>
+        <input type="text" id="channelNameInput" placeholder="ለምሳሌ: CBE Birr" />
+      </div>
+      <div class="form-group">
+        <label>አካውንት ቁጥር / Phone Number</label>
+        <input type="text" id="channelAccountInput" placeholder="ለምሳሌ: 0912345678" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveChannel()">አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('channelModal')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUTTING -->
+  <div class="modal-overlay hidden" id="cuttingModal" onclick="if(event.target===this)closeModal('cuttingModal')">
+    <div class="modal-box">
+      <h3 class="modal-title">✂️ ቆረጣ ጨምር</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>ቀን</label><input type="date" id="cutDate" /></div>
+        <div class="form-group"><label>የልብስ አይነት *</label><select id="cutType" class="form-input"></select></div>
+        <div class="form-group"><label>ቆረጣ ብዛት (ልብስ)</label><input type="number" id="cutQty" min="1" placeholder="0" />
+        </div>
+        <div class="form-group">
+          <label>የጨርቅ አይነት <span style="font-size:10px;color:rgba(197,203,216,0.5)">(ከክምችት)</span></label>
+          <select id="cutFabric" class="form-input" onchange="cutUpdateFabricStock()">
+            <option value="">— ጨርቅ ምረጥ —</option>
+          </select>
+          <div id="cutFabricStock" style="font-size:11px;color:var(--white-dim);margin-top:4px"></div>
+        </div>
+        <div class="form-group">
+          <label>የጨርቅ ፍጆታ <span style="font-size:10px;color:rgba(197,203,216,0.5)">(ለዚህ ቆረጣ)</span></label>
+          <input type="number" id="cutFabricQty" min="0.1" step="0.1" placeholder="0.0" class="form-input"
+            oninput="cutUpdateFabricStock()" />
+          <div id="cutFabricUnit" style="font-size:10px;color:rgba(197,203,216,0.4);margin-top:2px"></div>
+        </div>
+        <div class="form-group"><label>ሰራተኛ</label><input type="text" id="cutOperator" /></div>
+        <div class="form-group"><label>ማስታወሻ</label><input type="text" id="cutNote" /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveCutting()">✂️ አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('cuttingModal')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUTTING DAMAGE -->
+  <div class="modal-overlay hidden" id="cuttingDmgModal" onclick="if(event.target===this)closeModal('cuttingDmgModal')">
+    <div class="modal-box">
+      <h3 class="modal-title">⚠️ ዳሜጅ ጨምር</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>ቀን</label><input type="date" id="dmgDate" /></div>
+        <div class="form-group">
+          <label>የጨርቅ አይነት <span style="font-size:10px;color:rgba(197,203,216,0.5)">(ከክምችት)</span></label>
+          <select id="dmgFabric" class="form-input" onchange="dmgUpdateFabricStock()">
+            <option value="">— ጨርቅ ምረጥ —</option>
+          </select>
+          <div id="dmgFabricStock" style="font-size:11px;color:var(--white-dim);margin-top:4px"></div>
+        </div>
+        <div class="form-group">
+          <label>የተበላሸ ብዛት</label>
+          <input type="number" id="dmgQty" min="0.1" step="0.1" placeholder="0.0" class="form-input"
+            oninput="dmgUpdateFabricStock()" />
+          <div id="dmgFabricUnit" style="font-size:10px;color:rgba(197,203,216,0.4);margin-top:2px"></div>
+        </div>
+        <div class="form-group"><label>ምክንያት / ዝርዝር</label><input type="text" id="dmgReason" class="form-input"
+            placeholder="ቆርጦ ስህተት, ቀለም..." /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveCuttingDamage()">⚠️ አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('cuttingDmgModal')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEWING -->
+  <div class="modal-overlay hidden" id="sewingModal" onclick="if(event.target===this)closeModal('sewingModal')">
+    <div class="modal-box">
+      <h3 class="modal-title">🪡 ዕለታዊ ስፌት ምዝገባ</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>ቀን</label><input type="date" id="sewDate" class="form-input" /></div>
+        <div class="form-group">
+          <label>ሰራተኛ *</label>
+          <select id="sewWorker" class="form-input"></select>
+        </div>
+        <div class="form-group">
+          <label>ሙያ *</label>
+          <select id="sewDept" class="form-input" onchange="handleSewDeptSelectChange(this)"></select>
+        </div>
+        <div class="form-group"><label>የልብስ አይነት *</label><select id="sewType" class="form-input"></select></div>
+        <div class="form-group"><label>ብዛት *</label><input type="number" id="sewQty" min="1" class="form-input"
+            placeholder="0" /></div>
+        <div class="form-group"><label>ዳሜጅ ብዛት</label><input type="number" id="sewDmgQty" min="0" value="0"
+            class="form-input" /></div>
+        <div class="form-group"><label>ማስታወሻ</label><input type="text" id="sewNote" class="form-input"
+            placeholder="ምንም" /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveSewing()">✅ አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('sewingModal')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEWING WORKER MODAL -->
+  <div class="modal-overlay hidden" id="sewWorkerModal" onclick="if(event.target===this)closeModal('sewWorkerModal')">
+    <div class="modal-box" style="max-width:420px">
+      <h3 class="modal-title">👤 ሰራተኛ ጨምር / አስተካክል</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>ሙሉ ስም *</label><input type="text" id="sewWkName" class="form-input"
+            placeholder="ሙሉ ስም" /></div>
+        <div class="form-group">
+          <label>ዋና ሙያ</label>
+          <select id="sewWkDept" class="form-input" onchange="handleSewDeptSelectChange(this)"></select>
+        </div>
+        <div class="form-group"><label>ስልክ</label><input type="tel" id="sewWkPhone" class="form-input"
+            placeholder="09..." /></div>
+      </div>
+      <input type="hidden" id="sewWkEditId" />
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveSewWorker()">አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('sewWorkerModal')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEWING DAMAGE -->
+
+  <!-- MANAGE SEWING DEPARTMENTS (Sewing head / Owner only) — edit, hide/show, delete -->
+  <div class="modal-overlay hidden" id="assetModal" onclick="if(event.target===this)closeModal('assetModal')">
+    <div class="modal-box" style="max-width:400px">
+      <h3 class="modal-title">🏛️ ቋሚ ንብረት መዝግብ</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>የንብረት ስም *</label><input type="text" id="assetName" class="form-input"
+            placeholder="ለምሳሌ: ማቀዝቀዣ, ወንበር..." /></div>
+        <div class="form-group">
+          <label>ምድብ</label>
+          <select id="assetCategory" class="form-input">
+            <option value="ኮምፒተር">🖥️ ኮምፒተር</option>
+            <option value="ወንበር">🪑 ወንበር</option>
+            <option value="ጠረጴዛ">🗄️ ጠረጴዛ</option>
+            <option value="መደርደሪያ">🗃️ መደርደሪያ</option>
+            <option value="ማቀዝቀዣ">🧊 ማቀዝቀዣ</option>
+            <option value="ማሽን">⚙️ ማሽን</option>
+            <option value="ተሽከርካሪ">🚗 ተሽከርካሪ</option>
+            <option value="ሌላ" selected>🏛️ ሌላ</option>
+          </select>
+        </div>
+        <div class="form-group"><label>ዋጋ (ብር)</label><input type="number" id="assetValue" min="0" class="form-input"
+            placeholder="0" /></div>
+        <div class="form-group"><label>የተገዛበት ቀን *</label><input type="date" id="assetDate" class="form-input" /></div>
+        <div class="form-group"><label>ማስታወሻ</label><input type="text" id="assetNote" class="form-input"
+            placeholder="ምንም" /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveAsset()">✅ አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('assetModal')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="marketingLogModal"
+    onclick="if(event.target===this)closeModal('marketingLogModal')">
+    <div class="modal-box" style="max-width:440px">
+      <h3 class="modal-title">📣 የማርኬቲንግ ስራ መዝግብ</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>ቀን *</label><input type="date" id="mktDate" class="form-input" /></div>
+        <div class="form-group">
+          <label>ምድብ</label>
+          <select id="mktCategory" class="form-input">
+            <option value="ማህበራዊ ሚዲያ">📱 ማህበራዊ ሚዲያ</option>
+            <option value="ፖስተር/ህትመት">🖼️ ፖስተር/ህትመት</option>
+            <option value="ካምፔይን">📢 ካምፔይን</option>
+            <option value="ቪዲዮ">🎬 ቪዲዮ</option>
+            <option value="ኢቨንት">🎪 ኢቨንት</option>
+            <option value="ሌላ">📣 ሌላ</option>
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1"><label>ርዕስ / የተሰራው ስራ *</label><input type="text" id="mktTitle"
+            class="form-input" placeholder="ለምሳሌ: የፌስቡክ ማስታወቂያ ዘመቻ" /></div>
+        <div class="form-group"><label>ብዛት/መጠን</label><input type="number" id="mktQty" min="0" class="form-input"
+            placeholder="0" /></div>
+        <div class="form-group"><label>ክፍል</label><input type="text" id="mktUnit" class="form-input"
+            placeholder="ለምሳሌ: ፖስት, ቀናት" /></div>
+        <div class="form-group"><label>ወጪ (ብር)</label><input type="number" id="mktCost" min="0" class="form-input"
+            placeholder="0" /></div>
+        <div class="form-group"><label>የደረሰው/ውጤት</label><input type="text" id="mktReach" class="form-input"
+            placeholder="ለምሳሌ: 5,000 ሰው" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>እንዴት እንደተሰራ *</label><textarea id="mktDescription"
+            class="form-input" rows="3" placeholder="ስራው እንዴት እንደተከናወነ ይግለጹ..."></textarea></div>
+        <div class="form-group" style="grid-column:1/-1"><label>ማስታወሻ</label><input type="text" id="mktNote"
+            class="form-input" placeholder="ምንም" /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveMarketingLog()">✅ አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('marketingLogModal')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="sewDeptManageModal"
+    onclick="if(event.target===this)closeModal('sewDeptManageModal')">
+    <div class="modal-box" style="max-width:460px">
+      <h3 class="modal-title">🗂 ዘርፎችን አስተዳድር</h3>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+        <button class="btn-gold" style="font-size:12px;padding:6px 14px" onclick="openSewDeptAddDirect()">➕ ዘርፍ
+          ጨምር</button>
+      </div>
+      <div id="sewDeptManageNote"
+        style="font-size:10.5px;color:var(--white-dim);line-height:1.5;margin-bottom:10px;padding:8px 10px;background:rgba(255,255,255,0.03);border-radius:8px">
+      </div>
+      <div id="sewDeptManageList" style="max-height:50vh;overflow-y:auto"></div>
+      <div class="modal-actions">
+        <button class="btn-outline" onclick="closeModal('sewDeptManageModal')">ዝጋ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD / EDIT SEWING DEPARTMENT (Sewing head / Owner only) -->
+  <div class="modal-overlay hidden" id="sewDeptAddModal" onclick="if(event.target===this)cancelSewDeptAdd()">
+    <div class="modal-box" style="max-width:380px">
+      <h3 class="modal-title">➕ አዲስ ዘርፍ ጨምር</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>የዘርፍ ስም *</label><input type="text" id="sewNewDeptName" class="form-input"
+            placeholder="ለምሳሌ: ጥልፍ, ቁልፍ ቀዳዳ..." /></div>
+        <div class="form-group">
+          <label>አዶ (ምልክት)</label>
+          <select id="sewNewDeptIcon" class="form-input">
+            <option value="🔴">🔴</option>
+            <option value="🟠">🟠</option>
+            <option value="🟡">🟡</option>
+            <option value="🟢">🟢</option>
+            <option value="🔵">🔵</option>
+            <option value="🟣">🟣</option>
+            <option value="🟤">🟤</option>
+            <option value="⚫">⚫</option>
+            <option value="⚪">⚪</option>
+            <option value="🔶">🔶</option>
+            <option value="🔷">🔷</option>
+            <option value="🔺">🔺</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveSewDeptAdd()">✅ አስቀምጥ</button>
+        <button class="btn-outline" onclick="cancelSewDeptAdd()">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEWING DEPARTMENT DETAIL (drill-down by worker) -->
+  <div class="modal-overlay hidden" id="sewDeptDetailModal"
+    onclick="if(event.target===this)closeModal('sewDeptDetailModal')">
+    <div class="modal-box" style="max-width:680px">
+      <h3 class="modal-title" id="sewDeptDetailTitle">🔵 ኦቨርሎክ</h3>
+      <div id="sewDeptDetailBody"></div>
+      <div class="modal-actions">
+        <button class="btn-outline" onclick="closeModal('sewDeptDetailModal')">ዝጋ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STORE DISPATCH (ወደ ሱቅ ላክ) -->
+  <div class="modal-overlay hidden" id="storeDispatchModal">
+    <div class="modal-box" style="max-width:440px">
+      <h3 class="modal-title">📤 ወደ ሱቅ ላክ</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group"><label>ቀን</label><input type="date" id="dispatchDate" /></div>
+        <div class="form-group"><label>ወደ ቅርንጫፍ</label><select id="dispatchBranch"></select></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 90px;gap:10px">
+        <div class="form-group"><label>ዕቃ አይነት</label><select id="dispatchType"></select></div>
+        <div class="form-group"><label>ብዛት</label><input type="number" id="dispatchQty" min="1" /></div>
+      </div>
+      <p id="dispatchAvail" style="font-size:12px;color:var(--gold);margin:0 0 8px"></p>
+      <div class="form-group">
+        <label>🚗 የወሰደው ሰው ስም <span style="color:var(--gold)">*</span></label>
+        <input type="text" id="dispatchCarrier" placeholder="ሙሉ ስም ይጻፉ..." />
+      </div>
+      <div class="form-group"><label>ማስታወሻ</label><input type="text" id="dispatchNote" /></div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveDispatch()">📤 ላክ</button>
+        <button class="btn-outline" onclick="closeModal('storeDispatchModal')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SALES -->
+  <div class="modal-overlay hidden" id="salesModal">
+    <div class="modal-box">
+      <h3 class="modal-title">🛍️ ሽያጭ ጨምር</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>ቀን</label><input type="date" id="saleDate" /></div>
+        <div class="form-group"><label>ምርት</label><select id="saleProduct" onchange="updateSaleStock()"></select></div>
+        <div class="form-group"><label>ብዛት</label><input type="number" id="saleQty" min="1"
+            oninput="updateSaleStock()" /></div>
+        <div class="form-group" id="salePriceGroup">
+          <label>ዋጋ (ETB)</label>
+          <input type="number" id="salePrice" min="0" step="0.01" readonly style="opacity:0.7;cursor:not-allowed" />
+          <span id="salePriceNote" style="font-size:11px;color:var(--gold);margin-top:3px;display:block"></span>
+        </div>
+        <div class="form-group"><label>አከፋፈል</label>
+          <select id="salePayment" onchange="togglePaymentFields(this.value)">
+            <option value="cash">Cash / ጥሬ ገንዘብ</option>
+            <option value="transfer">Transfer / ዝውውር</option>
+            <option value="credit">Credit / ብድር</option>
+          </select>
+        </div>
+        <div class="form-group" id="saleTransferDetails" style="display:none">
+          <label>ዝውውር ቻናል</label>
+          <select id="saleTransferVia" onchange="showChannelAccount(this.value,'saleChannelAccountHint')"
+            style="background:#1a1f2e;color:var(--white)"></select>
+          <div id="saleChannelAccountHint"
+            style="margin-top:5px;font-size:11px;color:#90CAF9;font-weight:600;min-height:16px;letter-spacing:0.3px">
+          </div>
+        </div>
+        <div class="form-group" id="saleTransferCustomerWrap" style="display:none">
+          <label>የደንበኛ ስም *</label>
+          <input type="text" id="saleTransferCustomer" placeholder="ደንበኛ ስም ይጻፉ..." />
+        </div>
+        <div class="form-group" id="saleCreditDetails" style="display:none">
+          <label>ደንበኛ (ብድር)</label>
+          <select id="saleCreditCustomer"></select>
+        </div>
+        <!-- Regular customer toggle -->
+        <div class="form-group" id="saleRegCustWrap">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="saleIsRegular" onchange="toggleSaleRegularCustomer(this.checked)"
+              style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer" />
+            <span>👤 ቋሚ ደንበኛ ነው?</span>
+          </label>
+        </div>
+        <div id="saleRegCustDetails" style="display:none">
+          <div class="form-group">
+            <label>የደንበኛ ስም <span style="color:var(--gold)">*</span></label>
+            <input type="text" id="saleRegCustName" placeholder="ሙሉ ስም ይጻፉ..." />
+          </div>
+          <div class="form-group">
+            <label>ስልክ ቁጥር</label>
+            <input type="text" id="saleRegCustPhone" placeholder="0912345678" />
+          </div>
+        </div>
+        <div class="form-group"><label>ማስታወሻ</label><input type="text" id="saleNote" /></div>
+      </div>
+      <p id="saleStockInfo" style="font-size:12px;color:var(--gold);margin-top:8px"></p>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveSale()">አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('salesModal')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUSTOMER -->
+  <div class="modal-overlay hidden" id="customerModal">
+    <div class="modal-box">
+      <h3 class="modal-title">👤 ቋሚ ደንበኛ ጨምር</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>ሙሉ ስም</label><input type="text" id="custName" /></div>
+        <div class="form-group"><label>ስልክ</label><input type="tel" id="custPhone" /></div>
+        <div class="form-group"><label>ቅርንጫፍ</label><select id="custBranch"></select></div>
+        <div class="form-group"><label>ማስታወሻ</label><input type="text" id="custNote" /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveCustomer()">አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('customerModal')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXPENSE -->
+  <div class="modal-overlay hidden" id="expenseModal">
+    <div class="modal-box">
+      <h3 class="modal-title">💸 ወጪ ጨምር</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>ቀን</label><input type="date" id="expDate" /></div>
+        <div class="form-group"><label>ምድብ</label>
+          <select id="expCategory">
+            <option value="salary">ደሞዝ / Salary</option>
+            <option value="rent">ኪራይ / Rent</option>
+            <option value="utilities">አገልግሎቶች / Utilities</option>
+            <option value="transport">ትራንስፖርት / Transport</option>
+            <option value="maintenance">ጥገና / Maintenance</option>
+            <option value="raw">ጥሬ እቃ / Raw Material</option>
+            <option value="other">ሌላ / Other</option>
+          </select>
+        </div>
+        <div class="form-group"><label>መጠን (ETB)</label><input type="number" id="expAmount" min="0" step="0.01" /></div>
+        <div class="form-group"><label>ቅርንጫፍ</label><select id="expBranch"></select></div>
+        <div class="form-group"><label>ዝርዝር</label><input type="text" id="expDesc" /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveExpense()">አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('expenseModal')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- HR / EMPLOYEE ADD -->
+  <div class="modal-overlay hidden" id="hrModal">
+    <div class="modal-box">
+      <h3 class="modal-title">👤 ሰራተኛ ጨምር</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>ሙሉ ስም</label><input type="text" id="empName" /></div>
+        <div class="form-group"><label>ሚና</label>
+          <select id="empRole">
+            <option value="cutting">Cutting / ቆረጣ</option>
+            <option value="sewing">Sewing / ስፌት</option>
+            <option value="store">Store / ዕቃ ቤት</option>
+            <option value="sales">Sales / ሽያጭ</option>
+            <option value="hr">HR</option>
+            <option value="procurement">Procurement / ግዥ ክፍል</option>
+            <option value="marketing">Marketing / ማርኬቲንግ</option>
+          </select>
+        </div>
+        <div class="form-group"><label>ቅርንጫፍ (ለሽያጭ ሰራተኞች አስፈላጊ)</label><select id="empBranch"></select></div>
+        <div class="form-group"><label>ስልክ</label><input type="tel" id="empPhone" /></div>
+        <div class="form-group"><label>ወርሃዊ ደሞዝ (ETB)</label><input type="number" id="empSalary" min="0" /></div>
+        <div class="form-group"><label>ስራ የጀመረበት ቀን</label><input type="date" id="empStart" /></div>
+        <div class="form-group"><label>የተጠቃሚ ስም (Login)</label><input type="text" id="empUsername" /></div>
+        <div class="form-group"><label>ፓስዋርድ</label><input type="password" id="empPassword" /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-gold" onclick="saveEmployee()">አስቀምጥ</button>
+        <button class="btn-outline" onclick="closeModal('hrModal')">ሰርዝ</button>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+  <!-- WHOLESALE MODAL -->
+  <div id="wholesaleModal" class="modal-overlay hidden" onclick="if(event.target===this)closeModal('wholesaleModal')">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-header">
+        <span class="modal-title">🏪 የጅምላ ሽያጭ</span>
+        <button class="modal-close" onclick="closeModal('wholesaleModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label class="form-label">ቀን *</label>
+          <input type="date" id="wsDate" class="form-input">
+        </div>
+        <div class="form-row">
+          <label class="form-label">ነጋዴ / ደንበኛ ስም *</label>
+          <input type="text" id="wsCustomer" class="form-input" placeholder="ነጋዴው ስም">
+        </div>
+        <div class="form-row">
+          <label class="form-label">ስልክ</label>
+          <input type="tel" id="wsPhone" class="form-input" placeholder="09...">
+        </div>
+        <div class="form-row">
+          <label class="form-label">ምርት *</label>
+          <select id="wsProduct" class="form-input" onchange="wsUpdatePrice()"></select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">ብዛት *</label>
+          <input type="number" id="wsQty" class="form-input" min="1" placeholder="0" oninput="wsUpdateTotal()">
+        </div>
+        <div class="form-row">
+          <label class="form-label">የጅምላ ዋጋ (በ1 ቁ.) *</label>
+          <input type="number" id="wsPrice" class="form-input" min="0" placeholder="0" oninput="wsUpdateTotal()">
+          <div style="font-size:11px;color:var(--white-dim);margin-top:3px" id="wsRetailRef"></div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">አጠቃላይ</label>
+          <div id="wsTotal" style="font-size:16px;font-weight:700;color:var(--gold);padding:6px 0">—</div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">አከፋፈል *</label>
+          <select id="wsPayment" class="form-input" onchange="wsTogglePayment()">
+            <option value="cash">💵 ጥሬ ገንዘብ</option>
+            <option value="transfer">🏦 ዝውውር</option>
+            <option value="credit">📒 ክሬዲት</option>
+          </select>
+        </div>
+        <div id="wsTransferRow" class="form-row hidden">
+          <label class="form-label">ባንክ / ቻናል</label>
+          <input type="text" id="wsTransferVia" class="form-input" placeholder="CBE, TeleBirr...">
+        </div>
+        <div class="form-row">
+          <label class="form-label">ማስታወሻ</label>
+          <input type="text" id="wsNote" class="form-input" placeholder="ምንም">
+        </div>
+        <div
+          style="margin-top:6px;padding:10px 12px;background:rgba(255,167,38,0.08);border:1px solid rgba(255,167,38,0.3);border-radius:8px;font-size:12px;color:#FFA726">
+          ⚠️ የጅምላ ሽያጭ ኦነሩ ካፀደቀ በኋላ ብቻ ይፈፀማል
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-gold" onclick="saveWholesale()">📤 ለኦነር ላክ</button>
+        <button class="btn-outline" onclick="closeModal('wholesaleModal')">ይቅር</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="chatImgLightbox" class="modal-overlay hidden" onclick="closeChatLightbox()"
+    style="z-index:9999;background:rgba(0,0,0,0.88);display:flex;align-items:center;justify-content:center">
+    <img id="chatImgLightboxSrc" src=""
+      style="max-width:92vw;max-height:88vh;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,0.5)">
+    <button onclick="closeChatLightbox()"
+      style="position:absolute;top:18px;right:22px;background:rgba(255,255,255,0.12);border:none;color:#fff;width:38px;height:38px;border-radius:50%;font-size:18px;cursor:pointer">✕</button>
+  </div>
+
+</body>
+
+</html>

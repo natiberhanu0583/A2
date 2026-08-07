@@ -1,0 +1,10 @@
+{
+  "name": "a2-erp-fullstack",
+  "version": "1.0.0",
+  "description": "A2 Clothes ERP — root workspace runner",
+  "scripts": {
+    "dev": "npm start --prefix backend",
+    "start": "npm start --prefix backend",
+    "seed": "npm run seed --prefix backend"
+  }
+}
