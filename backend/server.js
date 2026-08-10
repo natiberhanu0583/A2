@@ -286,6 +286,29 @@ async function start() {
   try {
     await db.initTables();
     console.log('✅ Database tables ready.');
+    try {
+      const existingUsers = await db.listUsersSafe();
+      if (!existingUsers || existingUsers.length === 0) {
+        console.log('🌱 No users found in database. Performing initial auto-seed...');
+        const ACCOUNTS = [
+          { username: 'owner',        password: 'owner123',   name: 'አብርሃም ወልዴ',   role: 'owner',       branch: 'all' },
+          { username: 'cutting1',     password: 'cutting123', name: 'ቆረጣ ክፍል',      role: 'cutting',     branch: 'b1' },
+          { username: 'sewing1',      password: 'sewing123',  name: 'ስፌት ክፍል',      role: 'sewing',      branch: 'b1' },
+          { username: 'store1',       password: 'store123',   name: 'ዕቃ ቤት',        role: 'store',       branch: 'b1' },
+          { username: 'sales1',       password: 'sales123',   name: 'ሽያጭ ክፍል',      role: 'sales',       branch: 'b1' },
+          { username: 'hr1',          password: 'hr123',      name: 'HR ክፍል',        role: 'hr',          branch: 'all' },
+          { username: 'procurement1', password: 'proc123',    name: 'ግዥ ክፍል',       role: 'procurement', branch: 'all' },
+          { username: 'marketing1',   password: 'mkt123',     name: 'ማርኬቲንግ ክፍል',   role: 'marketing',   branch: 'all' },
+        ];
+        for (const acc of ACCOUNTS) {
+          const passwordHash = await auth.hashPassword(acc.password);
+          await db.createUser({ ...acc, passwordHash, active: true });
+        }
+        console.log('✅ Default accounts seeded (owner: owner / owner123).');
+      }
+    } catch (err) {
+      console.warn('⚠️ Auto-seed check:', err.message);
+    }
   } catch (e) {
     console.error('❌ Could not connect to / initialize MySQL. Check your .env DB_* settings.', e.message);
     process.exit(1);
