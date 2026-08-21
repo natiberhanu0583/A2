@@ -1748,7 +1748,7 @@ function renderDashboard() {
   const grossRevenue = sales.reduce((s,x) => s+(x.qty*x.price),0);
   const totalRefunds = refunds.reduce((a,r) => a + (r.financialDiff || r.origTotal || 0), 0);
   const totalRevenue = Math.max(0, grossRevenue - totalRefunds) + wsApproved;
-  const totalExpense = expenses.reduce((s,x) => s+x.amount,0) + rawCost;
+  const totalExpense = expenses.reduce((s,x) => s + (Number(x.amount)||0), 0);
   const profit = totalRevenue - totalExpense;
   const totalStock = Object.values(storeMap).reduce((a,b)=>a+b,0);
   const today = new Date().toISOString().slice(0,10);
@@ -4250,13 +4250,13 @@ function renderFinance() {
   const grossRetail=sales.reduce((a,x)=>a+(x.qty*x.price),0);
   const totalRefundAmt=refunds.reduce((a,r)=>a+(r.financialDiff||r.origTotal||0),0);
   const totalRevenue=Math.max(0, grossRetail - totalRefundAmt) + wsApproved;
-  const totalExpense=expenses.reduce((a,x)=>a+x.amount,0);
-  const rawCost=raw.reduce((a,x)=>a+x.cost,0);
-  const profit=totalRevenue-totalExpense-rawCost;
+  const totalExpense=expenses.reduce((a,x)=>a + (Number(x.amount)||0), 0);
+  const rawCost=raw.reduce((a,x)=>a + (Number(x.cost)||0), 0);
+  const profit=totalRevenue-totalExpense;
 
   document.getElementById('financeKpis').innerHTML=[
     {icon:'💵',val:fmtMoney(totalRevenue),label:t('kpiRevenue')},
-    {icon:'📤',val:fmtMoney(totalExpense+rawCost),label:t('kpiExpense')},
+    {icon:'📤',val:fmtMoney(totalExpense),label:t('kpiExpense')},
     {icon:profit>=0?'📈':'📉',val:fmtMoney(Math.abs(profit)),label:t('kpiProfit')+(profit<0?' (ኪሳራ)':' (ትርፍ)'),color:profit>=0?'#80E080':'#FF8080'},
     {icon:'🧵',val:fmtMoney(rawCost),label:lang==='am'?'ጥሬ እቃ ወጪ':'Raw Material Cost'},
   ].map(k=>`<div class="kpi-card"><div class="kpi-icon">${k.icon}</div><div class="kpi-val" style="${k.color?`color:${k.color}`:''}"> ${k.val}</div><div class="kpi-label">${k.label}</div></div>`).join('');
@@ -4274,6 +4274,17 @@ function renderFinance() {
           <td>${requestDeleteBtn('expenses',r.id)}</td></tr>`;
       }).join('')
     : noDataRow(h.length);
+
+  const tfootEl = document.getElementById('expenseTfoot');
+  if (tfootEl) {
+    tfootEl.innerHTML = expenses.length
+      ? `<tr style="font-weight:700;background:rgba(255,255,255,0.05)">
+          <td colspan="2">${lang==='am' ? 'አጠቃላይ ድምር ወጪ' : 'Total Expense'}</td>
+          <td style="color:var(--danger)">${fmtMoney(totalExpense)}</td>
+          <td colspan="3"></td>
+        </tr>`
+      : '';
+  }
 
 }
 
@@ -5100,8 +5111,8 @@ function generateReport(category, period) {
     const refTotal=refunds.reduce((a,r)=>a+(r.financialDiff||r.origTotal||0),0);
     const wsTotal=wsAll.reduce((a,w)=>a+w.total,0);
     const rev=Math.max(0, grossRev - refTotal) + wsTotal;
-    const exp=expenses.reduce((a,x)=>a+x.amount,0), rawc=raw.reduce((a,x)=>a+x.cost,0);
-    const profit=rev-exp-rawc;
+    const exp=expenses.reduce((a,x)=>a + (Number(x.amount)||0), 0), rawc=raw.reduce((a,x)=>a + (Number(x.cost)||0), 0);
+    const profit=rev-exp;
     const label = lang==='am' ? `💰 ፋይናንስ — ${periodLabel} ሪፖርት` : `💰 Finance — ${periodLabel} Report`;
     html=`<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -5110,14 +5121,15 @@ function generateReport(category, period) {
       </div>
       <div class="dash-kpis">
         <div class="kpi-card"><div class="kpi-icon">💵</div><div class="kpi-val">${fmtMoney(rev)}</div><div class="kpi-label">${t('kpiRevenue')}</div></div>
-        <div class="kpi-card"><div class="kpi-icon">📤</div><div class="kpi-val" style="color:var(--danger)">${fmtMoney(exp+rawc)}</div><div class="kpi-label">${t('kpiExpense')}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">📤</div><div class="kpi-val" style="color:var(--danger)">${fmtMoney(exp)}</div><div class="kpi-label">${t('kpiExpense')}</div></div>
         <div class="kpi-card"><div class="kpi-icon">${profit>=0?'📈':'📉'}</div><div class="kpi-val" style="color:${profit>=0?'var(--success)':'var(--danger)'}">${fmtMoney(Math.abs(profit))}</div><div class="kpi-label">${t('kpiProfit')}</div></div>
       </div>
       <div style="margin-top:14px"><h4 style="color:var(--gold);margin-bottom:8px">${lang==='am'?'ቅርንጫፍ ወጪ':'Branch Expenses'}</h4>
-        <div class="dash-kpis">${branches.map(b=>{const bExp=expenses.filter(e=>e.branch===b.id).reduce((a,x)=>a+x.amount,0);return`<div class="kpi-card"><div class="kpi-icon">🏪</div><div class="kpi-val" style="color:var(--danger)">${fmtMoney(bExp)}</div><div class="kpi-label">${b.name}</div></div>`;}).join('')}</div>
+        <div class="dash-kpis">${branches.map(b=>{const bExp=expenses.filter(e=>e.branch===b.id).reduce((a,x)=>a + (Number(x.amount)||0), 0);return`<div class="kpi-card"><div class="kpi-icon">🏪</div><div class="kpi-val" style="color:var(--danger)">${fmtMoney(bExp)}</div><div class="kpi-label">${b.name}</div></div>`;}).join('')}</div>
       </div>
       <table class="data-table" style="margin-top:14px"><thead><tr><th>${lang==='am'?'ቀን':'Date'}</th><th>${lang==='am'?'ዓይነት':'Type'}</th><th>${lang==='am'?'ዝርዝር':'Detail'}</th><th>${lang==='am'?'ሂሳብ':'Amount'}</th></tr></thead>
-      <tbody>${expenses.length?expenses.sort((a,b)=>b.date.localeCompare(a.date)).map(e=>`<tr><td>${e.date}</td><td><span class="badge badge-damage">${lang==='am'?'ወጪ':'Expense'}</span></td><td>${e.category||e.desc||'—'}</td><td style="color:var(--danger)">-${fmtMoney(e.amount)}</td></tr>`).join(''):noDataRow(4)}</tbody></table>
+      <tbody>${expenses.length?expenses.sort((a,b)=>b.date.localeCompare(a.date)).map(e=>`<tr><td>${e.date}</td><td><span class="badge badge-damage">${lang==='am'?'ወጪ':'Expense'}</span></td><td>${e.category||e.desc||'—'}</td><td style="color:var(--danger)">-${fmtMoney(e.amount)}</td></tr>`).join(''):noDataRow(4)}</tbody>
+      ${expenses.length?`<tfoot style="font-weight:700;background:rgba(255,255,255,0.05)"><tr><td colspan="3">${lang==='am'?'አጠቃላይ ድምር ወጪ':'Total Expense'}</td><td style="color:var(--danger)">-${fmtMoney(exp)}</td></tr></tfoot>`:''}</table>
     </div>`;
 
   } else if (category==='hr') {
