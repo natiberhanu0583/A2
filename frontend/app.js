@@ -398,6 +398,7 @@ function setLang(l) {
   ['langAmBtn','langEnBtn'].forEach(id => document.getElementById(id)?.classList.toggle('active', id === (l==='am'?'langAmBtn':'langEnBtn')));
   ['topLangAm','topLangEn'].forEach(id => document.getElementById(id)?.classList.toggle('active', id === (l==='am'?'topLangAm':'topLangEn')));
   applyTranslations();
+  updateBackBtn();
   if (currentUser) refreshActivePanel();
 }
 function t(key) { return T[lang][key] || T['en'][key] || key; }
@@ -543,6 +544,9 @@ function doLogout() {
   setAuthToken(null);
   currentUser = null;
   posCart = [];
+  navHistory = [];
+  currentPanelId = null;
+  updateBackBtn();
 
   // Hide overlays that might cover login
   const bb = document.getElementById('bottomCartBar'); if (bb) bb.style.display = 'none';
@@ -844,7 +848,18 @@ function getNavBadgeCount(id, role) {
   return { count: badgeCount, color: badgeColor };
 }
 
-function navigateTo(panelId) {
+let navHistory = [];
+let currentPanelId = null;
+
+function navigateTo(panelId, isBack = false) {
+  if (!isBack) {
+    if (currentPanelId && currentPanelId !== panelId) {
+      navHistory.push(currentPanelId);
+      if (navHistory.length > 30) navHistory.shift();
+    }
+  }
+  currentPanelId = panelId;
+
   document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
   // All .prod-panel elements (not .panel) live nested inside a wrapper group
   // (production, finance, hrgroup). Hide every one of them explicitly too, or
@@ -889,7 +904,32 @@ function navigateTo(panelId) {
   const titleKey = 'pageTitle_' + panelId;
   document.getElementById('pageTitle').textContent = T[lang][titleKey] || panelId;
   renderPanel(panelId);
+  updateBackBtn();
   if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('mobile-open');
+}
+
+function goBackNav() {
+  if (navHistory.length > 0) {
+    const prevPanel = navHistory.pop();
+    navigateTo(prevPanel, true);
+  } else {
+    const homePanel = (currentUser && currentUser.role === 'owner') ? 'dashboard' : 'attendance';
+    if (currentPanelId !== homePanel) {
+      navigateTo(homePanel, true);
+    }
+  }
+}
+
+function updateBackBtn() {
+  const backBtn = document.getElementById('backNavBtn');
+  if (!backBtn) return;
+  const homePanel = (currentUser && currentUser.role === 'owner') ? 'dashboard' : 'attendance';
+  const shouldShow = navHistory.length > 0 || (currentPanelId && currentPanelId !== homePanel);
+  backBtn.classList.toggle('hidden', !shouldShow);
+  const backTextEl = document.getElementById('backNavBtnText');
+  if (backTextEl) {
+    backTextEl.textContent = lang === 'am' ? 'ወደ ኋላ' : 'Back';
+  }
 }
 
 function refreshActivePanel() {

@@ -258,6 +258,9 @@ body{font-family:'Noto Sans Ethiopic','Inter',sans-serif;background:var(--navy);
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:58px;background:var(--midnight);border-bottom:1px solid var(--border);gap:16px;flex-shrink:0}
 .topbar-left{display:flex;align-items:center;gap:12px}
 .topbar-menu-btn{background:none;border:none;color:var(--white-dim);cursor:pointer;font-size:20px;padding:4px;display:none}
+.back-nav-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.35);border-radius:20px;color:var(--gold-lt);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s ease;white-space:nowrap}
+.back-nav-btn:hover{background:rgba(201,168,76,0.25);border-color:var(--gold);color:#fff;transform:translateX(-2px)}
+.back-nav-btn.hidden{display:none!important}
 .page-title{font-family:'Playfair Display',serif;font-size:18px;font-weight:600;color:var(--gold-lt)}
 .topbar-right{display:flex;align-items:center;gap:10px}
 .lang-mini{padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--white-dim);cursor:pointer;font-size:12px;font-family:inherit;transition:var(--transition)}
