@@ -352,48 +352,42 @@ function initData() {
 function syncProcurementExpenses() {
   const orders = getData('procurementOrders') || [];
   const expenses = getData('expenses') || [];
-  let changed = false;
 
   const validOrders = orders.filter(o => o.status === 'approved' || o.status === 'received');
 
-  validOrders.forEach(o => {
-    const cost = Number(o.cost) || 0;
-    if (cost <= 0) return;
-    const shortId = o.id ? o.id.slice(-5) : '';
-
-    // Search for existing expense record linked to this order
-    let existing = expenses.find(e => e.procOrderId === o.id);
-    if (!existing && shortId) {
-      existing = expenses.find(e => e.desc && (e.desc.includes(`#${shortId}`) || e.desc.includes(`Order #${shortId}`)));
+  // Keep non-procurement manual expenses (e.g. rent, salary, utilities, etc.)
+  const nonProcExpenses = expenses.filter(e => {
+    if (e.procOrderId) return false;
+    const cat = (e.category || '').trim();
+    const desc = (e.desc || '').trim();
+    if (cat === 'ግዥ' || cat === 'Procurement' || desc.includes('ትዕዛዝ #') || desc.includes('Order #')) {
+      return false;
     }
-
-    if (!existing) {
-      expenses.push({
-        id: uid(),
-        date: o.date || new Date().toISOString().slice(0, 10),
-        category: lang === 'am' ? 'ግዥ' : 'Procurement',
-        amount: cost,
-        branch: o.branch || 'b1',
-        desc: `${o.item} × ${o.qty} ${o.unit || ''} | ${lang === 'am' ? 'አቅራቢ' : 'Supplier'}: ${o.supplier || '—'} | ${lang === 'am' ? 'ትዕዛዝ' : 'Order'} #${shortId}`,
-        procOrderId: o.id
-      });
-      changed = true;
-    } else {
-      if (existing.procOrderId !== o.id) {
-        existing.procOrderId = o.id;
-        changed = true;
-      }
-      if (Number(existing.amount) !== cost) {
-        existing.amount = cost;
-        changed = true;
-      }
-    }
+    return true;
   });
 
-  if (changed) {
-    saveData('expenses', expenses);
+  // Generate clean procurement expense entries for all valid orders
+  const procExpenses = validOrders.map(o => {
+    const cost = Number(o.cost) || 0;
+    const shortId = o.id ? o.id.slice(-5) : '';
+    const existing = expenses.find(e => e.procOrderId === o.id || (shortId && e.desc && e.desc.includes(`#${shortId}`)));
+    return {
+      id: existing ? existing.id : uid(),
+      date: o.date || new Date().toISOString().slice(0, 10),
+      category: lang === 'am' ? 'ግዥ' : 'Procurement',
+      amount: cost,
+      branch: o.branch || 'b1',
+      desc: `${o.item} × ${o.qty} ${o.unit || ''} | ${lang === 'am' ? 'አቅራቢ' : 'Supplier'}: ${o.supplier || '—'} | ${lang === 'am' ? 'ትዕዛዝ' : 'Order'} #${shortId}`,
+      procOrderId: o.id
+    };
+  });
+
+  const synced = [...nonProcExpenses, ...procExpenses];
+
+  if (JSON.stringify(expenses) !== JSON.stringify(synced)) {
+    saveData('expenses', synced);
   }
-  return expenses;
+  return synced;
 }
 
 
@@ -1939,17 +1933,18 @@ function renderDashboard() {
   if (opsLabelEl) opsLabelEl.textContent = lang==='am' ? 'ቅርንጫፍ እና ሪፖርት' : 'Branches & Reports';
 
   const kpiData = [
-    { icon:'💵', val:fmtMoney(totalRevenue), label:t('kpiRevenue') },
-    { icon:'📤', val:fmtMoney(totalExpense), label:t('kpiExpense') },
-    { icon:profit>=0?'📈':'📉', val:fmtMoney(Math.abs(profit)), label:t('kpiProfit')+(profit<0?' (ኪሳራ)':' (ትርፍ)'), color:profit>=0?'#80E080':'#FF8080' },
-    { icon:'📦', val:totalStock, label:t('kpiItems') },
-    { icon:'🛍️', val:fmtMoney(todaySales), label:t('kpiSales') },
-    { icon:'👥', val:employees.filter(e=>e.active).length, label:t('kpiEmployees') },
+    { icon:'💵', val:fmtMoney(totalRevenue), label:t('kpiRevenue'), page:'finance' },
+    { icon:'📤', val:fmtMoney(totalExpense), label:t('kpiExpense'), page:'finance' },
+    { icon:profit>=0?'📈':'📉', val:fmtMoney(Math.abs(profit)), label:t('kpiProfit')+(profit<0?' (ኪሳራ)':' (ትርፍ)'), color:profit>=0?'#80E080':'#FF8080', page:'finance' },
+    { icon:'📦', val:totalStock, label:t('kpiItems'), page:'store' },
+    { icon:'🛍️', val:fmtMoney(todaySales), label:t('kpiSales'), page:'sales' },
+    { icon:'👥', val:employees.filter(e=>e.active).length, label:t('kpiEmployees'), page:'hr' },
   ];
   document.getElementById('dashKpis').innerHTML = kpiData.map(k=>`
-    <div class="kpi-card-hero">
+    <div class="kpi-card-hero" style="cursor:pointer;transition:transform 0.2s, border-color 0.2s" onclick="navigateTo('${k.page}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
       <div class="kpi-row">
         <div class="kpi-icon-badge">${k.icon}</div>
+        <span style="font-size:11px;opacity:0.5;margin-left:auto">➔</span>
       </div>
       <div class="kpi-val" style="${k.color?`color:${k.color}`:''}">${k.val}</div>
       <div class="kpi-label">${k.label}</div>
@@ -4318,8 +4313,8 @@ function renderFinance() {
     {icon:'💵',val:fmtMoney(totalRevenue),label:t('kpiRevenue')},
     {icon:'📤',val:fmtMoney(totalExpense),label:t('kpiExpense')},
     {icon:profit>=0?'📈':'📉',val:fmtMoney(Math.abs(profit)),label:t('kpiProfit')+(profit<0?' (ኪሳራ)':' (ትርፍ)'),color:profit>=0?'#80E080':'#FF8080'},
-    {icon:'🧵',val:fmtMoney(rawCost),label:lang==='am'?'ጥሬ እቃ ወጪ':'Raw Material Cost'},
-  ].map(k=>`<div class="kpi-card"><div class="kpi-icon">${k.icon}</div><div class="kpi-val" style="${k.color?`color:${k.color}`:''}"> ${k.val}</div><div class="kpi-label">${k.label}</div></div>`).join('');
+    {icon:'🧵',val:fmtMoney(rawCost),label:lang==='am'?'ጥሬ እቃ ወጪ':'Raw Material Cost',page:'procurement'},
+  ].map(k=>`<div class="kpi-card" ${k.page?`style="cursor:pointer" onclick="navigateTo('${k.page}')" title="${lang==='am'?'ዝርዝር ይመልከቱ':'Click for details'}"`:''}><div class="kpi-icon">${k.icon}</div><div class="kpi-val" style="${k.color?`color:${k.color}`:''}"> ${k.val}</div><div class="kpi-label">${k.label}</div></div>`).join('');
 
   populateBranchSelect('expBranch');
 
