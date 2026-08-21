@@ -343,7 +343,59 @@ function initData() {
   if (loadData('rawDispatches', null) === null) saveData('rawDispatches', []);
   if (loadData('cuttingRaw', null) === null) saveData('cuttingRaw', []);
   if (loadData('sewingRaw', null) === null) saveData('sewingRaw', []);
+
+  // Sync procurement expenses into finance
+  syncProcurementExpenses();
 } // end initData
+
+// ── EXPENSE & PROCUREMENT SYNCHRONIZATION ────────────────────────
+function syncProcurementExpenses() {
+  const orders = getData('procurementOrders') || [];
+  const expenses = getData('expenses') || [];
+  let changed = false;
+
+  const validOrders = orders.filter(o => o.status === 'approved' || o.status === 'received');
+
+  validOrders.forEach(o => {
+    const cost = Number(o.cost) || 0;
+    if (cost <= 0) return;
+    const shortId = o.id ? o.id.slice(-5) : '';
+
+    // Search for existing expense record linked to this order
+    let existing = expenses.find(e => e.procOrderId === o.id);
+    if (!existing && shortId) {
+      existing = expenses.find(e => e.desc && (e.desc.includes(`#${shortId}`) || e.desc.includes(`Order #${shortId}`)));
+    }
+
+    if (!existing) {
+      expenses.push({
+        id: uid(),
+        date: o.date || new Date().toISOString().slice(0, 10),
+        category: lang === 'am' ? 'ግዥ' : 'Procurement',
+        amount: cost,
+        branch: o.branch || 'b1',
+        desc: `${o.item} × ${o.qty} ${o.unit || ''} | ${lang === 'am' ? 'አቅራቢ' : 'Supplier'}: ${o.supplier || '—'} | ${lang === 'am' ? 'ትዕዛዝ' : 'Order'} #${shortId}`,
+        procOrderId: o.id
+      });
+      changed = true;
+    } else {
+      if (existing.procOrderId !== o.id) {
+        existing.procOrderId = o.id;
+        changed = true;
+      }
+      if (Number(existing.amount) !== cost) {
+        existing.amount = cost;
+        changed = true;
+      }
+    }
+  });
+
+  if (changed) {
+    saveData('expenses', expenses);
+  }
+  return expenses;
+}
+
 
 // ── LANGUAGE ──────────────────────────────────────────────────
 function setLang(l) {
@@ -1735,11 +1787,15 @@ function prodFlowPendingHTML(stage, canConfirm, confirmFnName, itemLabelFn) {
 
 // ── DASHBOARD ──────────────────────────────────────────────────
 function renderDashboard() {
+  syncProcurementExpenses();
   // Exclude wholesale-origin sales — they're counted separately to avoid double-counting
   const sales = getData('sales').filter(s => !s.isWholesale);
   const refunds = getData('refunds');
   const expenses = getData('expenses');
-  const rawCost = getData('raw').reduce((a,x)=>a+(x.cost||0),0);
+  const procApprovedReceived = getData('procurementOrders').filter(o => o.status === 'approved' || o.status === 'received');
+  const procCost = procApprovedReceived.reduce((a,o) => a + (Number(o.cost)||0), 0);
+  const directRawCost = getData('raw').filter(r => !r.procOrderId).reduce((a,x) => a + (Number(x.cost)||0), 0);
+  const rawCost = procCost + directRawCost;
   const wsApproved = getData('wholesale').filter(w => w.status === 'approved').reduce((a,w)=>a+w.total,0);
   const employees = getData('employees');
   const branches = getData('branches');
@@ -4245,13 +4301,17 @@ function saveCustomer() {
 
 // ── FINANCE ────────────────────────────────────────────────────
 function renderFinance() {
+  syncProcurementExpenses();
   const expenses=getData('expenses'), raw=getData('raw'), sales=getData('sales').filter(s=>!s.isWholesale), refunds=getData('refunds');
   const wsApproved=getData('wholesale').filter(w=>w.status==='approved').reduce((a,w)=>a+w.total,0);
   const grossRetail=sales.reduce((a,x)=>a+(x.qty*x.price),0);
   const totalRefundAmt=refunds.reduce((a,r)=>a+(r.financialDiff||r.origTotal||0),0);
   const totalRevenue=Math.max(0, grossRetail - totalRefundAmt) + wsApproved;
   const totalExpense=expenses.reduce((a,x)=>a + (Number(x.amount)||0), 0);
-  const rawCost=raw.reduce((a,x)=>a + (Number(x.cost)||0), 0);
+  const procApprovedReceived = getData('procurementOrders').filter(o => o.status === 'approved' || o.status === 'received');
+  const procCost = procApprovedReceived.reduce((a,o) => a + (Number(o.cost)||0), 0);
+  const directRawCost = raw.filter(r => !r.procOrderId).reduce((a,x) => a + (Number(x.cost)||0), 0);
+  const rawCost = procCost + directRawCost;
   const profit=totalRevenue-totalExpense;
 
   document.getElementById('financeKpis').innerHTML=[
@@ -4300,6 +4360,7 @@ function saveExpense() {
 
 // ── PROCUREMENT ────────────────────────────────────────────────
 function renderProcurement() {
+  syncProcurementExpenses();
   const orders = getData('procurementOrders');
   const branches = getData('branches');
   const isOwner = currentUser.role === 'owner';
@@ -4461,14 +4522,18 @@ function approveProcurement(id) {
   saveData('procurementOrders', orders);
   // ── Auto-register as expense (Finance) ──
   const expenses = getData('expenses');
-  expenses.push({
-    id: uid(), date: o.date,
-    category: lang==='am' ? 'ግዥ' : 'Procurement',
-    amount: o.cost,
-    branch: o.branch || 'b1',
-    desc: `${o.item} × ${o.qty} ${o.unit||''} | ${lang==='am'?'አቅራቢ':'Supplier'}: ${o.supplier||'—'} | ${lang==='am'?'ትዕዛዝ':'Order'} #${o.id.slice(-5)}`
-  });
-  saveData('expenses', expenses);
+  if (!expenses.some(e => e.procOrderId === o.id)) {
+    expenses.push({
+      id: uid(), date: o.date,
+      category: lang==='am' ? 'ግዥ' : 'Procurement',
+      amount: o.cost,
+      branch: o.branch || 'b1',
+      desc: `${o.item} × ${o.qty} ${o.unit||''} | ${lang==='am'?'አቅራቢ':'Supplier'}: ${o.supplier||'—'} | ${lang==='am'?'ትዕዛዝ':'Order'} #${o.id.slice(-5)}`,
+      procOrderId: o.id
+    });
+    saveData('expenses', expenses);
+  }
+  syncProcurementExpenses();
   renderProcurement();
   buildSidebar();
   toast((t('procApproveMsg')||'Approved') + ' — ' + (lang==='am'?'ወጪ ፋይናንስ ላይ ተመዘገበ ✓':'Expense logged to Finance ✓'));
@@ -4496,8 +4561,11 @@ function markProcurementReceived(id) {
   saveData('procurementOrders', orders);
   // ── Log to raw materials audit history ──
   const raw = getData('raw');
-  raw.push({ id:uid(), date:o.date, name:o.item, qty:o.qty, unit:o.unit, cost:o.cost, supplier:o.supplier||'—', branch:o.branch, procOrderId:o.id });
-  saveData('raw', raw);
+  if (!raw.some(r => r.procOrderId === o.id)) {
+    raw.push({ id:uid(), date:o.date, name:o.item, qty:o.qty, unit:o.unit, cost:o.cost, supplier:o.supplier||'—', branch:o.branch, procOrderId:o.id });
+    saveData('raw', raw);
+  }
+  syncProcurementExpenses();
   // ── Send to Store as a pending shipment — Store must confirm before it becomes usable stock ──
   pushProdFlow({
     id:uid(), stage:'proc_store', date:o.date, item:o.item, qty:o.qty, unit:o.unit,
@@ -5102,6 +5170,7 @@ function generateReport(category, period) {
     </div>`;
 
   } else if (category==='finance') {
+    syncProcurementExpenses();
     const sales=getData('sales').filter(x=>!x.isWholesale && inPeriod(x.date));
     const refunds=getData('refunds').filter(x=>inPeriod(x.date));
     const wsAll=getData('wholesale').filter(w=>w.status==='approved' && inPeriod(w.date));
