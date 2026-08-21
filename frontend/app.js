@@ -1737,17 +1737,23 @@ function prodFlowPendingHTML(stage, canConfirm, confirmFnName, itemLabelFn) {
 function renderDashboard() {
   // Exclude wholesale-origin sales — they're counted separately to avoid double-counting
   const sales = getData('sales').filter(s => !s.isWholesale);
+  const refunds = getData('refunds');
   const expenses = getData('expenses');
+  const rawCost = getData('raw').reduce((a,x)=>a+(x.cost||0),0);
+  const wsApproved = getData('wholesale').filter(w => w.status === 'approved').reduce((a,w)=>a+w.total,0);
   const employees = getData('employees');
   const branches = getData('branches');
   const storeMap = getStoreStockMap();
 
-  const totalRevenue = sales.reduce((s,x) => s+(x.qty*x.price),0);
-  const totalExpense = expenses.reduce((s,x) => s+x.amount,0);
+  const grossRevenue = sales.reduce((s,x) => s+(x.qty*x.price),0);
+  const totalRefunds = refunds.reduce((a,r) => a + (r.financialDiff || r.origTotal || 0), 0);
+  const totalRevenue = Math.max(0, grossRevenue - totalRefunds) + wsApproved;
+  const totalExpense = expenses.reduce((s,x) => s+x.amount,0) + rawCost;
   const profit = totalRevenue - totalExpense;
   const totalStock = Object.values(storeMap).reduce((a,b)=>a+b,0);
   const today = new Date().toISOString().slice(0,10);
-  const todaySales = sales.filter(x=>x.date===today).reduce((s,x)=>s+(x.qty*x.price),0);
+  const todayRefAmt = refunds.filter(r => r.date === today).reduce((a,r) => a + (r.financialDiff || r.origTotal || 0), 0);
+  const todaySales = Math.max(0, sales.filter(x=>x.date===today).reduce((s,x)=>s+(x.qty*x.price),0) - todayRefAmt);
 
   // Stock alerts in dashboard
   checkStockAlerts(storeMap, STORE_LOW, 'stockAlerts');
@@ -1897,7 +1903,8 @@ function renderDashboard() {
   const wholesaleApprovedAll = getData('wholesale').filter(w => w.status === 'approved');
   const branchEl = document.getElementById('branchList');
   branchEl.innerHTML = branches.map(b => {
-    const branchSales = sales.filter(s=>s.branch===b.id).reduce((a,x)=>a+(x.qty*x.price),0);
+    const bRefAmt = refunds.filter(r=>r.branch===b.id).reduce((a,r)=>a+(r.financialDiff||r.origTotal||0),0);
+    const branchSales = Math.max(0, sales.filter(s=>s.branch===b.id).reduce((a,x)=>a+(x.qty*x.price),0) - bRefAmt);
     const branchWholesale = wholesaleApprovedAll.filter(w=>w.branch===b.id).reduce((a,w)=>a+w.total,0);
     const branchTotal = branchSales + branchWholesale;
     const bStock = getBranchStockMap(b.id);
@@ -2823,9 +2830,12 @@ function renderSales() {
   // KPIs — retail + wholesale combined
   const today=new Date().toISOString().slice(0,10);
   const weekAgoO = new Date(Date.now()-6*86400000).toISOString().slice(0,10);
+  const refundsAll = getData('refunds').filter(r => currentUser.role === 'owner' || r.branch === myBranch);
+  const todayRefundAmt = refundsAll.filter(r => r.date === today).reduce((a,r) => a + (r.financialDiff || r.origTotal || 0), 0);
+  const totalRefundAmt = refundsAll.reduce((a,r) => a + (r.financialDiff || r.origTotal || 0), 0);
   const todaySales=filtered.filter(s=>s.date===today);
-  const todayRev=todaySales.reduce((a,x)=>a+(x.qty*x.price),0);
-  const totalRev=filtered.reduce((a,x)=>a+(x.qty*x.price),0);
+  const todayRev=Math.max(0, todaySales.reduce((a,x)=>a+(x.qty*x.price),0) - todayRefundAmt);
+  const totalRev=Math.max(0, filtered.reduce((a,x)=>a+(x.qty*x.price),0) - totalRefundAmt);
   const creditTotal=filtered.filter(s=>s.payment==='credit').reduce((a,x)=>a+(x.qty*x.price),0);
   // Wholesale totals
   const wsData = getData('wholesale');
@@ -3637,13 +3647,24 @@ function updateRefundPrice() {
 }
 
 function updateRefundDiff() {
+  const saleDate = document.getElementById('refundSaleDate')?.value;
   const product = document.getElementById('refundProduct')?.value;
   const qty = parseInt(document.getElementById('refundQty')?.value) || 0;
   const type = document.getElementById('refundType')?.value || 'money';
   const prices = getData('productPrices');
+  const sales = getData('sales');
 
-  const origP = prices.find(p => p.type === product);
-  const origPrice = origP ? origP.price * qty : 0;
+  let origUnitPrice = 0;
+  if (saleDate && product) {
+    const matchedSale = sales.slice().reverse().find(s => s.product === product && s.date === saleDate && (s.branch === currentUser.branch || currentUser.role === 'owner'));
+    if (matchedSale) origUnitPrice = matchedSale.price;
+  }
+  if (!origUnitPrice && product) {
+    const origP = prices.find(p => p.type === product);
+    origUnitPrice = origP ? origP.price : 0;
+  }
+
+  const origPrice = origUnitPrice * qty;
 
   const origEl = document.getElementById('rfOrigPrice');
   if (origEl) origEl.textContent = origPrice ? fmtMoney(origPrice) : '—';
@@ -3684,9 +3705,18 @@ function saveRefund() {
   if (!product || !qty || qty < 1) { toast(lang==='am'?'ምርትና ብዛት ያስፈልጋሉ':'Product and qty required','error'); return; }
 
   const branch = currentUser.branch;
+  const sales = getData('sales');
   const prices = getData('productPrices');
-  const origP = prices.find(p => p.type === product);
-  const origUnitPrice = origP ? origP.price : 0;
+
+  let origUnitPrice = 0;
+  if (saleDate && product) {
+    const matchedSale = sales.slice().reverse().find(s => s.product === product && s.date === saleDate && (s.branch === branch || currentUser.role === 'owner'));
+    if (matchedSale) origUnitPrice = matchedSale.price;
+  }
+  if (!origUnitPrice) {
+    const origP = prices.find(p => p.type === product);
+    origUnitPrice = origP ? origP.price : 0;
+  }
   const origTotal = origUnitPrice * qty;
 
   let newProduct = null, newQty = 0, newTotal = 0, financialDiff = 0;
@@ -3721,15 +3751,16 @@ function saveRefund() {
   saveData('branchStock', bs);
 
   // 3. Adjust the original sale record's financials on the saleDate
-  //    Find and mark the original sale as refunded / adjusted
-  const sales = getData('sales');
   let adjQty = qty;
   for (let i = sales.length - 1; i >= 0 && adjQty > 0; i--) {
     if (sales[i].branch === branch && sales[i].product === product && sales[i].date === saleDate && !sales[i].fullyRefunded) {
-      const canAdj = Math.min(sales[i].qty, adjQty);
-      sales[i].refundedQty = (sales[i].refundedQty || 0) + canAdj;
-      if (sales[i].refundedQty >= sales[i].qty) sales[i].fullyRefunded = true;
-      adjQty -= canAdj;
+      const remainingQty = sales[i].qty - (sales[i].refundedQty || 0);
+      if (remainingQty > 0) {
+        const canAdj = Math.min(remainingQty, adjQty);
+        sales[i].refundedQty = (sales[i].refundedQty || 0) + canAdj;
+        if (sales[i].refundedQty >= sales[i].qty) sales[i].fullyRefunded = true;
+        adjQty -= canAdj;
+      }
     }
   }
   saveData('sales', sales);
@@ -4214,8 +4245,11 @@ function saveCustomer() {
 
 // ── FINANCE ────────────────────────────────────────────────────
 function renderFinance() {
-  const expenses=getData('expenses'), raw=getData('raw'), sales=getData('sales');
-  const totalRevenue=sales.reduce((a,x)=>a+(x.qty*x.price),0);
+  const expenses=getData('expenses'), raw=getData('raw'), sales=getData('sales').filter(s=>!s.isWholesale), refunds=getData('refunds');
+  const wsApproved=getData('wholesale').filter(w=>w.status==='approved').reduce((a,w)=>a+w.total,0);
+  const grossRetail=sales.reduce((a,x)=>a+(x.qty*x.price),0);
+  const totalRefundAmt=refunds.reduce((a,r)=>a+(r.financialDiff||r.origTotal||0),0);
+  const totalRevenue=Math.max(0, grossRetail - totalRefundAmt) + wsApproved;
   const totalExpense=expenses.reduce((a,x)=>a+x.amount,0);
   const rawCost=raw.reduce((a,x)=>a+x.cost,0);
   const profit=totalRevenue-totalExpense-rawCost;
@@ -4979,10 +5013,13 @@ function generateReport(category, period) {
   } else if (category==='branch') {
     // Per-branch sales report (retail + wholesale combined) — exclude noSales branches
     const sales=getData('sales').filter(s=>!s.isWholesale && inPeriod(s.date));
+    const refunds=getData('refunds').filter(r=>inPeriod(r.date));
     const wsAll=getData('wholesale').filter(w=>w.status==='approved' && inPeriod(w.date));
     const salesBranches = branches.filter(b => !b.noSales);
     const label = lang==='am' ? `🏪 ቅርንጫፍ — ${periodLabel} ሪፖርት` : `🏪 Branch — ${periodLabel} Report`;
-    const retailGrand = sales.reduce((a,x)=>a+(x.qty*x.price),0);
+    const retailGrossGrand = sales.reduce((a,x)=>a+(x.qty*x.price),0);
+    const refGrand = refunds.reduce((a,r)=>a+(r.financialDiff||r.origTotal||0),0);
+    const retailGrand = Math.max(0, retailGrossGrand - refGrand);
     const wsGrand = wsAll.reduce((a,w)=>a+w.total,0);
     const grandTotal = retailGrand + wsGrand;
     html=`<div class="card">
@@ -4993,13 +5030,15 @@ function generateReport(category, period) {
       <div class="dash-kpis" style="margin-bottom:6px">
         ${salesBranches.map(b=>{
           const bSales=sales.filter(s=>s.branch===b.id);
+          const bRefForBranch=refunds.filter(r=>r.branch===b.id);
           const bWsForBranch=wsAll.filter(w=>w.branch===b.id);
-          const bRetail=bSales.reduce((a,x)=>a+(x.qty*x.price),0);
+          const bRefAmt=bRefForBranch.reduce((a,r)=>a+(r.financialDiff||r.origTotal||0),0);
+          const bRetail=Math.max(0, bSales.reduce((a,x)=>a+(x.qty*x.price),0) - bRefAmt);
           const bWs=bWsForBranch.reduce((a,w)=>a+w.total,0);
           const bRev=bRetail+bWs;
           const share = grandTotal>0 ? Math.round((bRev/grandTotal)*100) : 0;
           // Revenue split by how it was paid (cash / transfer / credit) — retail + wholesale combined
-          const payAmt = (pm) => bSales.filter(s=>s.payment===pm).reduce((a,x)=>a+(x.qty*x.price),0)
+          const payAmt = (pm) => Math.max(0, bSales.filter(s=>s.payment===pm).reduce((a,x)=>a+(x.qty*x.price),0) - bRefForBranch.filter(r=>r.payment===pm).reduce((a,r)=>a+(r.financialDiff||r.origTotal||0),0))
                                 + bWsForBranch.filter(w=>w.payment===pm).reduce((a,w)=>a+w.total,0);
           const cashAmt = payAmt('cash'), transferAmt = payAmt('transfer'), creditAmt = payAmt('credit');
           const pct = (amt) => bRev>0 ? Math.round((amt/bRev)*100) : 0;
@@ -5052,10 +5091,16 @@ function generateReport(category, period) {
     </div>`;
 
   } else if (category==='finance') {
-    const sales=getData('sales').filter(x=>inPeriod(x.date));
+    const sales=getData('sales').filter(x=>!x.isWholesale && inPeriod(x.date));
+    const refunds=getData('refunds').filter(x=>inPeriod(x.date));
+    const wsAll=getData('wholesale').filter(w=>w.status==='approved' && inPeriod(w.date));
     const expenses=getData('expenses').filter(x=>inPeriod(x.date));
     const raw=getData('raw').filter(x=>inPeriod(x.date));
-    const rev=sales.reduce((a,x)=>a+(x.qty*x.price),0), exp=expenses.reduce((a,x)=>a+x.amount,0), rawc=raw.reduce((a,x)=>a+x.cost,0);
+    const grossRev=sales.reduce((a,x)=>a+(x.qty*x.price),0);
+    const refTotal=refunds.reduce((a,r)=>a+(r.financialDiff||r.origTotal||0),0);
+    const wsTotal=wsAll.reduce((a,w)=>a+w.total,0);
+    const rev=Math.max(0, grossRev - refTotal) + wsTotal;
+    const exp=expenses.reduce((a,x)=>a+x.amount,0), rawc=raw.reduce((a,x)=>a+x.cost,0);
     const profit=rev-exp-rawc;
     const label = lang==='am' ? `💰 ፋይናንስ — ${periodLabel} ሪፖርት` : `💰 Finance — ${periodLabel} Report`;
     html=`<div class="card">
