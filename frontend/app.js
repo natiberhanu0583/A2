@@ -2005,12 +2005,19 @@ function renderDashboard() {
         }).join('')}`);
 
       wsQueueEl.innerHTML = `
-        <div style="margin-bottom:12px;padding:10px 12px;background:rgba(255,167,38,0.06);
+        <div style="margin-bottom:12px;padding:10px 14px;background:rgba(255,167,38,0.06);
                     border:1.5px solid rgba(255,167,38,0.4);border-radius:10px;animation:pulse-border 1.8s infinite">
-          <div style="font-size:11px;font-weight:700;color:#FFA726;margin-bottom:2px">
-            🔔 ${lang==='am'?`ፈቃድ የሚጠብቁ (${total})`:`Actions needed (${total})`}
+          <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleDashboardReport('dashPendingQueue')">
+            <div style="font-size:12.5px;font-weight:700;color:#FFA726;display:flex;align-items:center;gap:6px">
+              🔔 ${lang==='am'?`ፈቃድ የሚጠብቁ (${total})`:`Actions needed (${total})`}
+            </div>
+            <button id="dashPendingQueue_btn" style="background:rgba(255,167,38,0.15);border:1px solid rgba(255,167,38,0.4);color:#FFA726;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">
+              ${lang==='am'?'ሰብስብ ▲':'Collapse ▲'}
+            </button>
           </div>
-          ${sections.join('')}
+          <div id="dashPendingQueue_body" style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08)">
+            ${sections.join('')}
+          </div>
         </div>`;
     }
   }
@@ -8144,7 +8151,7 @@ function renderOwnerRefundReport(containerId) {
 
   const isDash = targetId.startsWith('dash');
   const bodyEl = document.getElementById(`${targetId}_body`);
-  const isCurrentlyOpen = bodyEl ? bodyEl.style.display !== 'none' : !isDash;
+  const isCurrentlyOpen = bodyEl ? bodyEl.style.display !== 'none' : true;
 
   const isOwner = currentUser.role === 'owner';
   const myBranch = currentUser.branch;
