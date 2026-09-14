@@ -2121,6 +2121,20 @@ function renderDashboard() {
     </div>`;
   }).join('');
 
+  const branchQuickBtnsEl = document.getElementById('branchQuickBtns');
+  if (branchQuickBtnsEl) {
+    branchQuickBtnsEl.innerHTML = branches.map(b => {
+      const bRefAmt = refunds.filter(r=>r.branch===b.id).reduce((a,r)=>a+(r.financialDiff||r.origTotal||0),0);
+      const branchSales = Math.max(0, sales.filter(s=>s.branch===b.id).reduce((a,x)=>a+(x.qty*x.price),0) - bRefAmt);
+      const branchWholesale = wholesaleApprovedAll.filter(w=>w.branch===b.id).reduce((a,w)=>a+w.total,0);
+      const branchTotal = branchSales + branchWholesale;
+      return `<button class="report-btn" onclick="navigateToReport('branch','daily')" style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+        <span>🏪 ${b.name}</span>
+        <span style="color:var(--gold);font-weight:700">${fmtMoney(branchTotal)}</span>
+      </button>`;
+    }).join('');
+  }
+
   // Report buttons — map index to category+period
   const reportBtnMeta = [
     {cat:'sales',period:'daily'}, {cat:'sales',period:'weekly'}, {cat:'sales',period:'monthly'},
