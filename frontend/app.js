@@ -1793,6 +1793,12 @@ function toggleAlertDetails(listId) {
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
+function toggleBranchStockDetails(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
 // ── PRODUCTION FLOW: Procurement → Store → Cutting → Sewing → Store → Branch ──
 // Generic shipment records live in `prodFlow`, keyed by `stage`:
 //   proc_store     : Procurement → Store   (raw material)
@@ -2055,7 +2061,8 @@ function renderDashboard() {
     const branchWholesale = wholesaleApprovedAll.filter(w=>w.branch===b.id).reduce((a,w)=>a+w.total,0);
     const branchTotal = branchSales + branchWholesale;
     const bStock = getBranchStockMap(b.id);
-    const stockSummary = Object.entries(bStock).map(([type,qty])=>`${type}:${qty}`).join(', ') || '—';
+    const totalStockQty = Object.values(bStock).reduce((a,x)=>a+(Number(x)||0), 0);
+    const stockSummary = Object.entries(bStock).filter(([_,q])=>q>0).map(([type,qty])=>`${type}: ${qty}`).join(', ') || '—';
     const bAssets = getFixedAssets(b.id);
     const bAssetsValue = bAssets.reduce((a,x)=>a+(x.value||0),0);
     const isActive = b.active !== false;
@@ -2067,7 +2074,13 @@ function renderDashboard() {
       <div style="flex:1">
         <div class="branch-name" style="display:flex;align-items:center;gap:6px">${b.name} ${statusBadge}</div>
         <div class="branch-loc">📍 ${b.location}</div>
-        <div class="branch-loc" style="margin-top:2px">📦 ${stockSummary}</div>
+        <div class="branch-loc" style="margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span>📦 ${lang==='am'?'ክምችት':'Stock'}: <b style="color:var(--gold)">${totalStockQty.toLocaleString()} ${lang==='am'?'ቁ.':'pcs'}</b></span>
+          ${totalStockQty > 0 ? `<button onclick="toggleBranchStockDetails('bStock_${b.id}')" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:var(--white-dim);padding:1px 6px;border-radius:4px;font-size:9.5px;cursor:pointer;font-family:inherit">${lang==='am'?'ዝርዝር ▾':'Details ▾'}</button>` : ''}
+        </div>
+        <div id="bStock_${b.id}" style="display:none;font-size:10px;color:var(--white-dim);background:rgba(0,0,0,0.25);padding:6px;border-radius:6px;margin-top:4px;max-height:90px;overflow-y:auto;border:1px solid rgba(255,255,255,0.06)">
+          ${stockSummary}
+        </div>
         ${bAssets.length?`<div class="branch-loc" style="margin-top:2px;color:#BA68C8">🏛️ ${lang==='am'?'ቋሚ ንብረት':'Fixed Assets'}: ${bAssets.length} (${fmtMoney(bAssetsValue)})</div>`:''}
         ${branchWholesale>0?`<div class="branch-loc" style="margin-top:2px;color:#4FC3F7">🏪 ${lang==='am'?'ጅምላ':'Wholesale'}: ${fmtMoney(branchWholesale)}</div>`:''}
       </div>
