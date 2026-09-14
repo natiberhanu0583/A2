@@ -1828,11 +1828,33 @@ function clothingTypeOptionsHTML(selected) {
 // stock > 0) can be picked — this is what "ready for sewing" means. Every other department
 // works on pieces already in process, so it uses the full owner clothing-type catalog.
 function sewTypeOptionsForDept(deptKey, selected) {
-  if (deptKey !== getFirstSewDeptKey()) return clothingTypeOptionsHTML(selected);
-  const cutStock = getData('sewingCutStock').filter(p => p.qty > 0);
-  if (!cutStock.length) return `<option value="">— ${lang==='am'?'ከቆረጣ የደረሰ ምንም የለም':'Nothing received from Cutting yet'} —</option>`;
-  return `<option value="">— ${lang==='am'?'ምረጥ':'Select'} —</option>` +
-    cutStock.map(p => `<option value="${p.type}" ${p.type===selected?'selected':''}>${p.type} (${lang==='am'?'ዝግጁ':'ready'}: ${p.qty})</option>`).join('');
+  const firstDeptKey = getFirstSewDeptKey();
+  if (deptKey === firstDeptKey) {
+    const cutStock = getData('sewingCutStock').filter(p => p.qty > 0);
+    if (!cutStock.length) return `<option value="">— ${lang==='am'?'ከቆረጣ የደረሰ ምንም የለም':'Nothing received from Cutting yet'} —</option>`;
+    return `<option value="">— ${lang==='am'?'ምረጥ':'Select'} —</option>` +
+      cutStock.map(p => `<option value="${p.type}" ${p.type===selected?'selected':''}>${p.type} (${lang==='am'?'ዝግጁ':'ready'}: ${p.qty})</option>`).join('');
+  } else {
+    // Packaging or subsequent sewing stages: ONLY show items that entered Overlock (first stage) with remaining available quantity
+    const sewingData = getData('sewing');
+    const overlockTypes = {};
+    sewingData.filter(r => r.dept === firstDeptKey).forEach(r => {
+      overlockTypes[r.type] = (overlockTypes[r.type] || 0) + (r.qty || 0);
+    });
+    const availItems = [];
+    Object.entries(overlockTypes).forEach(([type, totalEntered]) => {
+      const totalProcessed = sewingData.filter(r => r.type === type && r.dept === deptKey).reduce((a, r) => a + (r.qty || 0), 0);
+      const rem = totalEntered - totalProcessed;
+      if (rem > 0 || type === selected) {
+        availItems.push({ type, rem: Math.max(0, rem) });
+      }
+    });
+    if (!availItems.length) {
+      return `<option value="">— ${lang==='am'?'በኦቨርሎክ የተጠናቀቀ አልባሳት የለም':'No overlock-completed items available'} —</option>`;
+    }
+    return `<option value="">— ${lang==='am'?'ምረጥ':'Select'} —</option>` +
+      availItems.map(p => `<option value="${p.type}" ${p.type===selected?'selected':''}>${p.type} (${lang==='am'?'በኦቨርሎክ ያለ':'overlock ready'}: ${p.rem})</option>`).join('');
+  }
 }
 
 function updateSewTypeSelectForDept() {
@@ -5266,7 +5288,8 @@ function generateReport(category, period) {
             ${bWs>0?`<br><small style="color:#4FC3F7;font-size:10px">🏪 ${lang==='am'?'ጅምላ':'Wholesale'}: ${fmtMoney(bWs)}</small>`:''}
             <br><small style="color:#80e080;font-size:10px">💵 ${lang==='am'?'ካሽ':'Cash'}: ${fmtMoney(cashAmt)} (${pct(cashAmt)}%)</small>
             <br><small style="color:#4FC3F7;font-size:10px">🔁 ${lang==='am'?'ትራንስፈር':'Transfer'}: ${fmtMoney(transferAmt)} (${pct(transferAmt)}%)</small>
-            <br><small style="color:#FFA726;font-size:10px">📇 ${lang==='am'?'ብድር':'Credit'}: ${fmtMoney(creditAmt)} (${pct(creditAmt)}%)</small></div></div>`;
+            <br><small style="color:#FFA726;font-size:10px">📇 ${lang==='am'?'ብድር':'Credit'}: ${fmtMoney(creditAmt)} (${pct(creditAmt)}%)</small>
+            <br><small style="color:#FF9090;font-size:10px">🔄 ${lang==='am'?'ሪፈንድ':'Refund'}: ${fmtMoney(bRefAmt)} (${bRefForBranch.length} ${lang==='am'?'ተመላሽ':'returns'})</small></div></div>`;
         }).join('')}
       </div>
       <div style="text-align:right;font-size:12px;color:var(--white-dim);margin-bottom:10px">
