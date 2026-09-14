@@ -343,6 +343,7 @@ function initData() {
   if (loadData('rawDispatches', null) === null) saveData('rawDispatches', []);
   if (loadData('cuttingRaw', null) === null) saveData('cuttingRaw', []);
   if (loadData('sewingRaw', null) === null) saveData('sewingRaw', []);
+  if (loadData('pendingEdits', null) === null) saveData('pendingEdits', []);
 
   // Sync procurement expenses into finance
   syncProcurementExpenses();
@@ -1848,7 +1849,7 @@ function renderDashboard() {
   // Stock alerts in dashboard
   checkStockAlerts(storeMap, STORE_LOW, 'stockAlerts');
 
-  // ── Unified approval queue (wholesale + store transfers + pending transfers + procurement) ──
+  // ── Unified approval queue (wholesale + store transfers + pending transfers + procurement + transfers + edits) ──
   const wsQueueEl = document.getElementById('wholesaleQueueDash');
   if (wsQueueEl && currentUser.role === 'owner') {
     const pendingWS   = getData('wholesale').filter(w => w.status === 'pending');
@@ -1856,7 +1857,9 @@ function renderDashboard() {
     const pendingTr   = getData('pendingTransfers').filter(p => p.status === 'pending');
     const pendingProc = getData('procurementOrders').filter(p => p.status === 'pending');
     const pendingLoan = getData('branchLoans').filter(l => l.status === 'pending_owner');
-    const total = pendingWS.length + pendingStr.length + pendingTr.length + pendingProc.length + pendingLoan.length;
+    const pendingProdFlow = getData('prodFlow').filter(x => x.status === 'pending_owner');
+    const pendingEdits    = getData('pendingEdits').filter(e => e.status === 'pending');
+    const total = pendingWS.length + pendingStr.length + pendingTr.length + pendingProc.length + pendingLoan.length + pendingProdFlow.length + pendingEdits.length;
 
     if (total === 0) { wsQueueEl.innerHTML = ''; }
     else {
@@ -1886,6 +1889,21 @@ function renderDashboard() {
       if (pendingWS.length) sections.push(`
         <div style="font-size:10px;font-weight:700;color:#FFA726;letter-spacing:0.5px;margin:8px 0 4px">🏪 ${lang==='am'?'ጅምላ ሽያጭ':'WHOLESALE'} (${pendingWS.length})</div>
         ${pendingWS.map(w => row('📦', `${w.customer} · ${w.product} ×${w.qty}`, `${w.date} · ${w.byName||w.by}`, fmtMoney(w.total), `approveWholesale('${w.id}')`, `rejectWholesale('${w.id}')`)).join('')}`);
+
+      if (pendingProdFlow.length) sections.push(`
+        <div style="font-size:10px;font-weight:700;color:#C9A84C;letter-spacing:0.5px;margin:8px 0 4px">🚚 ${lang==='am'?'የምርት ዝውውር (ቆረጣ/ስፌት/እቃ ቤት)':'PRODUCTION TRANSFERS'} (${pendingProdFlow.length})</div>
+        ${pendingProdFlow.map(p => {
+          const stageLabel = p.stage === 'cutting_sewing' ? (lang==='am'?'ቆረጣ → ስፌት':'Cutting → Sewing') : (lang==='am'?'ስፌት → እቃ ቤት':'Sewing → Store');
+          return row('🚚', `${stageLabel} · ${p.type} ×${p.qty}`, `${p.date} · ${p.sentByName||p.sentBy||'—'}`, '', `approveProdFlowTransfer('${p.id}')`, `rejectProdFlowTransfer('${p.id}')`);
+        }).join('')}`);
+
+      if (pendingEdits.length) sections.push(`
+        <div style="font-size:10px;font-weight:700;color:#FF9090;letter-spacing:0.5px;margin:8px 0 4px">✏️ ${lang==='am'?'የመረጃ ማስተካከያ ጥያቄዎች':'DATA CORRECTION REQUESTS'} (${pendingEdits.length})</div>
+        ${pendingEdits.map(e => {
+          const modName = { sales:'ሽያጭ', cutting:'ቆረጣ', sewing:'ስፌት', store:'ዕቃ ቤት', expenses:'ወጪ', refunds:'ሪፈንድ' }[e.dataKey] || e.dataKey;
+          const diffStr = Object.entries(e.newVal||{}).map(([k,v]) => `${k}: ${e.oldVal[k]} ➔ <b>${v}</b>`).join(', ');
+          return row('✏️', `[${modName}] ${e.reason||'ማስተካከያ'}`, `${diffStr} · ${e.requestedBy||'—'} · ${e.date}`, '', `approveEditRequest('${e.id}')`, `rejectEditRequest('${e.id}')`);
+        }).join('')}`);
 
       if (pendingStr.length) sections.push(`
         <div style="font-size:10px;font-weight:700;color:#FFA726;letter-spacing:0.5px;margin:8px 0 4px">📤 ${lang==='am'?'ዕቃ ቤት ወደ ሱቅ':'STORE DISPATCH'} (${pendingStr.length})</div>
@@ -2174,6 +2192,10 @@ function renderDashboard() {
       }
     }
   });
+
+  // Render Past Daily Aggregated Summary & Owner Refund Report
+  renderPastDailySummary('dashPastDailyContainer', today);
+  renderOwnerRefundReport('dashRefundReportContainer');
 }
 
 // ── CUTTING ────────────────────────────────────────────────────
@@ -2290,7 +2312,7 @@ function renderCutting() {
         <td style="color:var(--white-dim)">${r.operator||'—'}</td>
         <td style="color:var(--white-dim)">${r.note||'—'}</td>
         <td>${sendCell}</td>
-        <td>${requestDeleteBtn('cutting',r.id)}</td>
+        <td>${editRecordBtn('cutting',r.id)}${requestDeleteBtn('cutting',r.id)}</td>
       </tr>`;
       }).join('')
     : noDataRow(h.length);
@@ -2304,7 +2326,7 @@ function renderCutting() {
         <td style="color:#FF9090;font-weight:600">${r.fabric}</td>
         <td style="text-align:center"><span class="badge badge-damage">${r.qty} ${r.unit||''}</span></td>
         <td style="color:var(--white-dim)">${r.reason||'—'}</td>
-        <td>${requestDeleteBtn('cuttingDamage',r.id)}</td>
+        <td>${editRecordBtn('cuttingDamage',r.id)}${requestDeleteBtn('cuttingDamage',r.id)}</td>
       </tr>`).join('')
     : noDataRow(5);
 
@@ -2506,10 +2528,12 @@ function saveSewing() {
   }
   if (!dept || dept === '__addnew__') { toast(lang==='am'?'ሙያ ይምረጡ':'Please select a department','error'); return; }
 
+  const firstDeptKey = getFirstSewDeptKey();
+
   // Whichever department is FIRST in the configured sequence is where cut pieces from Cutting
   // actually enter the sewing process — so that's what draws down the "received from Cutting"
   // pool. Later stages work on pieces already in process and don't draw the pool again.
-  if (dept === getFirstSewDeptKey()) {
+  if (dept === firstDeptKey) {
     const pool = getData('sewingCutStock');
     const stock = pool.find(p => p.type === type);
     const avail = stock ? stock.qty : 0;
@@ -2519,6 +2543,29 @@ function saveSewing() {
     }
     stock.qty -= qty;
     saveData('sewingCutStock', pool);
+  } else {
+    // Validation for subsequent sewing stages (packaging / ማሸግ or intermediate stages)
+    const sewingData = getData('sewing');
+    // Calculate total units of this item type that entered sewing at first stage (overlock)
+    const totalEnteredSewing = sewingData.filter(r => r.type === type && r.dept === firstDeptKey).reduce((a, r) => a + (r.qty || 0), 0);
+    
+    if (totalEnteredSewing <= 0) {
+      toast(lang==='am'
+        ? `⛔ "${type}" ወደ ስፌት ክፍል አልገባም (በኦቨርሎክ አልተመዘገበም)`
+        : `⛔ "${type}" has not entered sewing (not registered in overlock)`, 'error');
+      return;
+    }
+
+    // Calculate total units of this item type already processed in this target department (e.g. packaging)
+    const totalProcessedInDept = sewingData.filter(r => r.type === type && r.dept === dept).reduce((a, r) => a + (r.qty || 0), 0);
+    const availForDept = totalEnteredSewing - totalProcessedInDept;
+
+    if (qty > availForDept) {
+      toast(lang==='am'
+        ? `⛔ ወደ ስፌት ክፍል ገብተው ኦቨርሎክ ያልሰራውን ስራ ማሳለፍ አይቻልም (በኦቨርሎክ የተሰራው: ${totalEnteredSewing}፣ ቀደም ሲል የተሰራው/የታሸገው: ${totalProcessedInDept}፣ የሚቀረው: ${Math.max(0, availForDept)})`
+        : `⛔ Cannot process work that has not completed overlock (Overlock total: ${totalEnteredSewing}, Already processed: ${totalProcessedInDept}, Remaining: ${Math.max(0, availForDept)})`, 'error');
+      return;
+    }
   }
 
   const data = getData('sewing');
@@ -2633,7 +2680,7 @@ function renderStore() {
   document.getElementById('storeThead').innerHTML=`<tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>`;
   document.getElementById('storeTbody').innerHTML = data.length
     ? data.map(r=>`<tr><td>${r.date}</td><td>${r.type}</td><td>${r.qty}</td><td>${r.location||'—'}</td>
-        <td>${requestDeleteBtn('store',r.id)}</td></tr>`).join('')
+        <td>${editRecordBtn('store',r.id)}${requestDeleteBtn('store',r.id)}</td></tr>`).join('')
     : noDataRow(5);
 
   // ── Transfers section
@@ -5314,6 +5361,19 @@ function generateReport(category, period) {
     </div>`;
   }
   container.innerHTML=html;
+  if (category === 'sales' || category === 'finance' || category === 'production') {
+    const extraDiv = document.createElement('div');
+    extraDiv.id = 'reportExtraContainers';
+    extraDiv.innerHTML = `
+      <div id="reportsPastDailyContainer" style="margin-top:16px"></div>
+      <div id="reportsRefundContainer" style="margin-top:16px"></div>
+    `;
+    container.appendChild(extraDiv);
+    setTimeout(() => {
+      renderPastDailySummary('reportsPastDailyContainer', todayStr);
+      renderOwnerRefundReport('reportsRefundContainer');
+    }, 50);
+  }
 }
 
 
@@ -6602,16 +6662,21 @@ function saveCutToSewing(cutId) {
   saveData('cutting', data);
 
   const today = new Date().toISOString().slice(0,10);
-  pushProdFlow({ id:uid(), stage:'cutting_sewing', date:today, type:r.type, qty, status:'pending', sentBy:currentUser.username, sentByName:currentUser.name, cutId:r.id });
+  pushProdFlow({ id:uid(), stage:'cutting_sewing', date:today, type:r.type, qty, status:'pending_owner', sentBy:currentUser.username, sentByName:currentUser.name, cutId:r.id });
 
   document.getElementById('cutToSewModal').remove();
   renderCutting();
-  toast(`📤 ${qty} ${r.type} → ${lang==='am'?'ስፌት ክፍል ተልኳል':'sent to Sewing'} ✓`);
+  toast(`📤 ${qty} ${r.type} → ${lang==='am'?'ስፌት ክፍል ተልኳል (ኦነሩ እንዲያፀድቀው ተልኳል)':'sent to Sewing (awaiting owner approval)'} ✓`);
 }
 
 // Sewing confirms cut pieces physically arrived — credits the "ready to sew" pool
 function confirmCutToSewing(id) {
-  if (!isSewDeptManager()) { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ስፌት ክፍል ብቻ ነው':'⛔ Only Sewing staff can confirm this','error'); return; }
+  if (!isSewDeptManager() && currentUser.role !== 'owner') { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ስፌት ክፍል ወይም ኦነር ብቻ ነው':'⛔ Only Sewing staff or Owner can confirm this','error'); return; }
+  const item = getData('prodFlow').find(p => p.id === id);
+  if (item && item.status === 'pending_owner') {
+    toast(lang==='am'?'⛔ አሁንም በኦነር አልፀደቀም — ኦነሩ ካፀደቀው በኋላ ነው የሚረጋገጠው':'⛔ Awaiting owner approval first', 'error');
+    return;
+  }
   const x = updateProdFlow(id, { status:'confirmed', confirmedBy:currentUser.username, confirmedByName:currentUser.name, confirmedAt:new Date().toISOString() });
   if (!x) return;
   const pool = getData('sewingCutStock');
@@ -6697,19 +6762,23 @@ function saveSewToStore() {
   if (qty > avail) { toast(lang==='am'?'ዝግጁ ካለው በላይ ነው':'Exceeds ready quantity','error'); return; }
 
   const today = new Date().toISOString().slice(0,10);
-  pushProdFlow({ id:uid(), stage:'sewing_store', date:today, type, qty, status:'pending', sentBy:currentUser.username, sentByName:currentUser.name });
+  pushProdFlow({ id:uid(), stage:'sewing_store', date:today, type, qty, status:'pending_owner', sentBy:currentUser.username, sentByName:currentUser.name });
 
   document.getElementById('sewToStoreModal').remove();
   renderSewing();
-  toast(`📤 ${qty} ${type} → ${lang==='am'?'እቃ ቤት ተልኳል':'sent to Store'} ✓`);
+  toast(`📤 ${qty} ${type} → ${lang==='am'?'እቃ ቤት ተልኳል (ኦነሩ እንዲያፀድቀው ተልኳል)':'sent to Store (awaiting owner approval)'} ✓`);
 }
 
 // Store clicks "✅ Confirm" on an incoming finished-goods shipment from Sewing —
 // opens a popup so they can pick/enter which shelf it will be placed on before it's confirmed.
 function openReceiveShelfModal(id) {
-  if (!canActStore()) { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው እቃ ቤት ብቻ ነው':'⛔ Only Store staff can confirm this','error'); return; }
+  if (!canActStore() && currentUser.role !== 'owner') { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው እቃ ቤት ወይም ኦነር ብቻ ነው':'⛔ Only Store staff or Owner can confirm this','error'); return; }
   const x = getData('prodFlow').find(p => p.id === id);
   if (!x) return;
+  if (x.status === 'pending_owner') {
+    toast(lang==='am'?'⛔ አሁንም በኦነር አልፀደቀም — ኦነሩ ካፀደቀው በኋላ ነው የሚረጋገጠው':'⛔ Awaiting owner approval first', 'error');
+    return;
+  }
   const label = x.type;
   // Existing shelf names used so far (from previously confirmed store items), for quick pick
   const shelves = [...new Set(getData('store').map(r => r.location).filter(l => l && l !== 'ከስፌት' && l !== 'From Sewing'))];
@@ -7814,7 +7883,7 @@ function renderSewing() {
             <td style="text-align:center;font-weight:700;color:var(--gold)">${r.qty}</td>
             <td style="text-align:center">${r.dmgQty>0?`<span class="badge badge-damage">${r.dmgQty}</span>`:'—'}</td>
             <td style="color:var(--white-dim)">${r.note||'—'}</td>
-            <td>${requestDeleteBtn('sewing',r.id)}</td>
+            <td>${editRecordBtn('sewing',r.id)}${requestDeleteBtn('sewing',r.id)}</td>
           </tr>`;
         }).join('')
       : noDataRow(8);
@@ -7829,3 +7898,468 @@ function toggleSewDetailTab() {
   body.style.display = isOpen ? 'none' : '';
   if (arrow) arrow.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
 }
+
+// ── DATA CORRECTION & TRANSFER APPROVALS ─────────────────────────
+
+function editRecordBtn(dataKey, id) {
+  return `<button class="btn-outline" style="padding:2px 7px;font-size:10px;margin-right:4px;border-color:rgba(79,195,247,0.4);color:#4FC3F7;background:rgba(79,195,247,0.08);cursor:pointer;font-family:inherit" onclick="openCorrectionModal('${dataKey}','${id}')" title="${lang==='am'?'አስተካክል':'Edit'}">✏️ <span style="font-size:10px">${lang==='am'?'አስተካክል':'Edit'}</span></button>`;
+}
+
+function openCorrectionModal(dataKey, recordId) {
+  const records = getData(dataKey);
+  const target = records.find(r => r.id === recordId);
+  if (!target) { toast(lang==='am'?'መረጃው አልተገኘም':'Record not found', 'error'); return; }
+
+  const isOwner = currentUser.role === 'owner';
+  const modalTitle = document.getElementById('correctionModalTitle');
+  if (modalTitle) {
+    modalTitle.textContent = isOwner 
+      ? (lang==='am' ? `✏️ መረጃ ቀጥታ አስተካክል (${dataKey})` : `✏️ Direct Edit Record (${dataKey})`)
+      : (lang==='am' ? `✏️ የመረጃ ማስተካከያ ጥያቄ (${dataKey})` : `✏️ Request Data Correction (${dataKey})`);
+  }
+
+  const fieldLabels = {
+    qty: lang==='am'?'ብዛት':'Quantity',
+    price: lang==='am'?'ዋጋ':'Price',
+    product: lang==='am'?'ምርት':'Product',
+    type: lang==='am'?'አይነት':'Type',
+    date: lang==='am'?'ቀን':'Date',
+    worker: lang==='am'?'ሰራተኛ':'Worker',
+    customer: lang==='am'?'ደንበኛ':'Customer',
+    reason: lang==='am'?'ምክንያት':'Reason',
+    note: lang==='am'?'ማስታወሻ':'Note',
+    fabric: lang==='am'?'ጨርቅ':'Fabric',
+    amount: lang==='am'?'መጠን':'Amount',
+    item: lang==='am'?'እቃ':'Item',
+  };
+
+  const skipKeys = new Set(['id', 'createdAt', 'by', 'byName', 'branch', 'sentQty', 'status', 'isWholesale']);
+  const editableKeys = Object.keys(target).filter(k => !skipKeys.has(k));
+
+  let fieldsHTML = editableKeys.map(k => {
+    const label = fieldLabels[k] || k;
+    const val = target[k] ?? '';
+    const isNum = typeof val === 'number';
+    return `<div style="margin-bottom:10px">
+      <label style="display:block;font-size:11px;color:rgba(197,203,216,0.6);font-weight:600;margin-bottom:3px">${label}</label>
+      <input type="${isNum?'number':'text'}" id="editField_${k}" class="form-input" value="${val}" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:var(--white);font-size:13px" />
+    </div>`;
+  }).join('');
+
+  fieldsHTML += `<div style="margin-bottom:12px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08)">
+    <label style="display:block;font-size:11px;color:#FFA726;font-weight:700;margin-bottom:3px">${lang==='am'?'የማስተካከያ ምክንያት *':'Reason for Correction *'}</label>
+    <input type="text" id="editCorrectionReason" class="form-input" placeholder="${lang==='am'?'ለምሳሌ: በስህተት የገባ ብዛት':'e.g. Quantity entered by mistake'}" style="width:100%;padding:8px 10px;background:rgba(255,167,38,0.06);border:1px solid rgba(255,167,38,0.3);border-radius:8px;color:var(--white);font-size:13px" />
+  </div>`;
+
+  document.getElementById('correctionModalBody').innerHTML = fieldsHTML;
+
+  const btnSubmit = document.getElementById('btnSubmitCorrection');
+  if (btnSubmit) {
+    btnSubmit.onclick = () => submitCorrection(dataKey, recordId, editableKeys);
+  }
+
+  openModal('correctionModal');
+}
+
+function submitCorrection(dataKey, recordId, editableKeys) {
+  const reason = document.getElementById('editCorrectionReason')?.value.trim();
+  if (!reason) {
+    toast(lang==='am'?'እባክዎን የማስተካከያ ምክንያት ይጥቀሱ':'Please state the reason for correction', 'error');
+    return;
+  }
+
+  const records = getData(dataKey);
+  const target = records.find(r => r.id === recordId);
+  if (!target) return;
+
+  const newVal = {};
+  editableKeys.forEach(k => {
+    const el = document.getElementById(`editField_${k}`);
+    if (el) {
+      const isNum = typeof target[k] === 'number';
+      newVal[k] = isNum ? parseFloat(el.value) || 0 : el.value.trim();
+    }
+  });
+
+  const isOwner = currentUser.role === 'owner';
+
+  if (isOwner) {
+    Object.assign(target, newVal);
+    saveData(dataKey, records);
+    closeModal('correctionModal');
+    refreshActivePanel();
+    toast(lang==='am'?'✅ መረጃው ተስተካክሏል':'Record updated ✓');
+  } else {
+    const pendingEdits = getData('pendingEdits');
+    pendingEdits.push({
+      id: uid(),
+      dataKey,
+      recordId,
+      oldVal: { ...target },
+      newVal,
+      reason,
+      requestedBy: currentUser.name || currentUser.username,
+      requestedByUsername: currentUser.username,
+      date: new Date().toISOString().slice(0, 10),
+      status: 'pending'
+    });
+    saveData('pendingEdits', pendingEdits);
+    closeModal('correctionModal');
+    toast(lang==='am'?'✅ የማስተካከያ ጥያቄ ተልኳል — ኦነሩ ያፀድቀዋል':'Correction request submitted — awaiting owner approval', 'warning');
+  }
+}
+
+function approveEditRequest(pendingId) {
+  if (currentUser.role !== 'owner') return;
+  const pendingEdits = getData('pendingEdits');
+  const req = pendingEdits.find(e => e.id === pendingId);
+  if (!req) return;
+
+  const records = getData(req.dataKey);
+  const target = records.find(r => r.id === req.recordId);
+  if (target) {
+    Object.assign(target, req.newVal);
+    saveData(req.dataKey, records);
+  }
+
+  req.status = 'approved';
+  req.approvedBy = currentUser.username;
+  req.approvedAt = new Date().toISOString();
+  saveData('pendingEdits', pendingEdits.filter(e => e.id !== pendingId));
+
+  refreshActivePanel();
+  renderDashboard();
+  toast(lang==='am'?'✅ የመረጃ ማስተካከያ ጥያቄው ፀድቋል':'Edit request approved ✓');
+}
+
+function rejectEditRequest(pendingId) {
+  if (currentUser.role !== 'owner') return;
+  const pendingEdits = getData('pendingEdits');
+  saveData('pendingEdits', pendingEdits.filter(e => e.id !== pendingId));
+  refreshActivePanel();
+  renderDashboard();
+  toast(lang==='am'?'❌ የማስተካከያ ጥያቄው ውድቅ ሆኗል':'Edit request rejected', 'warning');
+}
+
+function approveProdFlowTransfer(id) {
+  if (currentUser.role !== 'owner') {
+    toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ኦነር ብቻ ነው':'⛔ Only owner can approve','error');
+    return;
+  }
+  const x = updateProdFlow(id, {
+    status: 'approved',
+    approvedBy: currentUser.username,
+    approvedByName: currentUser.name,
+    approvedAt: new Date().toISOString()
+  });
+  if (!x) return;
+  refreshActivePanel();
+  renderDashboard();
+  toast(lang==='am'?`✅ የ${x.type} ዝውውር ፀድቋል — ተቀባዩ ክፍል ሊያረጋግጥ ይችላል`:`✅ Transfer of ${x.type} approved — target dept can confirm`);
+}
+
+function rejectProdFlowTransfer(id) {
+  if (currentUser.role !== 'owner') {
+    toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ኦነር ብቻ ነው':'⛔ Only owner can reject','error');
+    return;
+  }
+  const x = updateProdFlow(id, {
+    status: 'rejected',
+    rejectedBy: currentUser.username,
+    rejectedByName: currentUser.name,
+    rejectedAt: new Date().toISOString()
+  });
+  if (!x) return;
+  
+  if (x.stage === 'cutting_sewing' && x.cutId) {
+    const cutting = getData('cutting');
+    const cutRecord = cutting.find(c => c.id === x.cutId);
+    if (cutRecord) {
+      cutRecord.sentQty = Math.max(0, (cutRecord.sentQty || 0) - x.qty);
+      saveData('cutting', cutting);
+    }
+  }
+  
+  refreshActivePanel();
+  renderDashboard();
+  toast(lang==='am'?'❌ ዝውውሩ ውድቅ ሆኗል':'Transfer rejected', 'warning');
+}
+
+// ── OWNER REFUND REPORT ──────────────────────────────────────────
+function renderOwnerRefundReport(containerId) {
+  const container = document.getElementById(containerId || 'ownerRefundReportContainer');
+  if (!container) return;
+
+  const isOwner = currentUser.role === 'owner';
+  const myBranch = currentUser.branch;
+  let refunds = getData('refunds');
+  if (!isOwner) {
+    refunds = refunds.filter(r => r.branch === myBranch);
+  }
+
+  const branches = getData('branches');
+  const selectedBranch = document.getElementById('orrBranchFilter')?.value || 'all';
+  const startDate = document.getElementById('orrStartDate')?.value || '';
+  const endDate = document.getElementById('orrEndDate')?.value || '';
+  const selectedType = document.getElementById('orrTypeFilter')?.value || 'all';
+
+  let filtered = [...refunds];
+  if (selectedBranch !== 'all') {
+    filtered = filtered.filter(r => r.branch === selectedBranch);
+  }
+  if (startDate) {
+    filtered = filtered.filter(r => r.date >= startDate);
+  }
+  if (endDate) {
+    filtered = filtered.filter(r => r.date <= endDate);
+  }
+  if (selectedType !== 'all') {
+    filtered = filtered.filter(r => (r.type || 'money') === selectedType);
+  }
+
+  const totalRefundAmt = filtered.reduce((a, r) => a + (r.financialDiff || r.origTotal || 0), 0);
+  const totalCount = filtered.length;
+  const moneyCount = filtered.filter(r => r.type === 'money' || !r.type).length;
+  const exchCount = filtered.filter(r => r.type === 'exchange').length;
+
+  const branchOptions = branches.map(b => `<option value="${b.id}" ${selectedBranch===b.id?'selected':''}>🏪 ${b.name}</option>`).join('');
+
+  container.innerHTML = `
+    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(224,90,90,0.3);border-radius:12px;padding:16px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:22px">🔄</span>
+          <div>
+            <h3 style="margin:0;color:#FF9090;font-size:16px">${lang==='am'?'የሽያጭ ሪፈንድ ሪፖርት':'Sales Refund Report'}</h3>
+            <div style="font-size:11px;color:var(--white-dim);margin-top:2px">${lang==='am'?'የተመለሱና የተቀየሩ አልባሳት ዝርዝር ሪፖርት':'Detailed view of returned & exchanged items'}</div>
+          </div>
+        </div>
+        <button class="btn-gold" onclick="window.print()" style="font-size:12px;padding:5px 12px">🖨️ Print</button>
+      </div>
+
+      <!-- Filters -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;padding:10px;background:rgba(0,0,0,0.2);border-radius:9px">
+        ${isOwner ? `
+        <div style="flex:1;min-width:130px">
+          <div style="font-size:10px;color:rgba(197,203,216,0.5);margin-bottom:3px;font-weight:600">${lang==='am'?'ቅርንጫፍ':'Branch'}</div>
+          <select id="orrBranchFilter" onchange="renderOwnerRefundReport('${containerId}')" style="width:100%;padding:7px;background:#0f1420;border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--white);font-size:12px">
+            <option value="all">${lang==='am'?'ሁሉንም ቅርንጫፎች':'All Branches'}</option>
+            ${branchOptions}
+          </select>
+        </div>` : ''}
+        <div style="flex:1;min-width:110px">
+          <div style="font-size:10px;color:rgba(197,203,216,0.5);margin-bottom:3px;font-weight:600">${lang==='am'?'ከ ቀን':'From Date'}</div>
+          <input type="date" id="orrStartDate" value="${startDate}" onchange="renderOwnerRefundReport('${containerId}')" style="width:100%;padding:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--white);font-size:12px" />
+        </div>
+        <div style="flex:1;min-width:110px">
+          <div style="font-size:10px;color:rgba(197,203,216,0.5);margin-bottom:3px;font-weight:600">${lang==='am'?'እስከ ቀን':'To Date'}</div>
+          <input type="date" id="orrEndDate" value="${endDate}" onchange="renderOwnerRefundReport('${containerId}')" style="width:100%;padding:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--white);font-size:12px" />
+        </div>
+        <div style="flex:1;min-width:120px">
+          <div style="font-size:10px;color:rgba(197,203,216,0.5);margin-bottom:3px;font-weight:600">${lang==='am'?'ዓይነት':'Type'}</div>
+          <select id="orrTypeFilter" onchange="renderOwnerRefundReport('${containerId}')" style="width:100%;padding:7px;background:#0f1420;border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--white);font-size:12px">
+            <option value="all">${lang==='am'?'ሁሉንም':'All Types'}</option>
+            <option value="money" ${selectedType==='money'?'selected':''}>💵 ${lang==='am'?'ገንዘብ ተመላሽ':'Money Refund'}</option>
+            <option value="exchange" ${selectedType==='exchange'?'selected':''}>🔄 ${lang==='am'?'የዕቃ ቅያሬ':'Item Exchange'}</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- KPI Summary Row -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
+        <div style="text-align:center;padding:10px;background:rgba(224,90,90,0.08);border:1px solid rgba(224,90,90,0.25);border-radius:9px">
+          <div style="font-size:10px;color:#FF9090;font-weight:700">${lang==='am'?'አጠቃላይ የተመለሰ ብር':'Total Refunded'}</div>
+          <div style="font-size:20px;font-weight:800;color:#FF9090;margin-top:2px">${fmtMoney(totalRefundAmt)}</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:rgba(255,167,38,0.08);border:1px solid rgba(255,167,38,0.25);border-radius:9px">
+          <div style="font-size:10px;color:#FFA726;font-weight:700">${lang==='am'?'የሪፈንድ ብዛት':'Total Refunds'}</div>
+          <div style="font-size:20px;font-weight:800;color:#FFA726;margin-top:2px">${totalCount}</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:rgba(79,195,247,0.08);border:1px solid rgba(79,195,247,0.25);border-radius:9px">
+          <div style="font-size:10px;color:#4FC3F7;font-weight:700">${lang==='am'?'ገንዘብ vs ቅያሬ':'Money vs Exchange'}</div>
+          <div style="font-size:14px;font-weight:700;color:#4FC3F7;margin-top:4px">💵 ${moneyCount} &nbsp;|&nbsp; 🔄 ${exchCount}</div>
+        </div>
+      </div>
+
+      <!-- Detail Table -->
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.1);color:rgba(197,203,216,0.6)">
+              <th style="padding:7px;text-align:left">${lang==='am'?'ቀን':'Date'}</th>
+              <th style="padding:7px;text-align:left">${lang==='am'?'ቅርንጫፍ':'Branch'}</th>
+              <th style="padding:7px;text-align:left">${lang==='am'?'ደንበኛ':'Customer'}</th>
+              <th style="padding:7px;text-align:left">${lang==='am'?'የተመለሰው':'Returned Item'}</th>
+              <th style="padding:7px;text-align:left">${lang==='am'?'የተቀየረው':'Exchanged Item'}</th>
+              <th style="padding:7px;text-align:right">${lang==='am'?'ተመላሽ ብር':'Refund Amt'}</th>
+              <th style="padding:7px;text-align:left">${lang==='am'?'ምክንያት':'Reason'}</th>
+              <th style="padding:7px;text-align:left">${lang==='am'?'መዝጋቢ':'By'}</th>
+              <th style="padding:7px;text-align:center">${lang==='am'?'ተግባር':'Action'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filtered.length ? [...filtered].sort((a,b)=>b.date.localeCompare(a.date)).map(r => {
+              const br = branches.find(b=>b.id===r.branch);
+              const branchName = br ? br.name : r.branch;
+              const isExch = r.type === 'exchange';
+              const returnStr = `${r.product} ×${r.qty}`;
+              const exchStr = isExch ? `${r.newProduct} ×${r.newQty}` : '—';
+              const refAmt = r.financialDiff || r.origTotal || 0;
+              return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+                <td style="padding:7px;white-space:nowrap;color:var(--white-dim)">${r.date}</td>
+                <td style="padding:7px;white-space:nowrap;font-weight:600">${branchName}</td>
+                <td style="padding:7px;color:var(--white)">${r.customer||'—'}</td>
+                <td style="padding:7px;color:#FF9090;font-weight:600">↩️ ${returnStr}</td>
+                <td style="padding:7px;color:#4FC3F7">${isExch ? `🔄 ${exchStr}` : '—'}</td>
+                <td style="padding:7px;text-align:right;font-weight:700;color:#FF9090">${fmtMoney(refAmt)}</td>
+                <td style="padding:7px;color:var(--white-dim);font-size:11px">${r.reason||'—'}</td>
+                <td style="padding:7px;color:rgba(197,203,216,0.5);font-size:11px">${r.byName||r.by||'—'}</td>
+                <td style="padding:7px;text-align:center;white-space:nowrap">
+                  ${editRecordBtn('refunds', r.id)}
+                  ${requestDeleteBtn('refunds', r.id)}
+                </td>
+              </tr>`;
+            }).join('') : `<tr><td colspan="9" style="text-align:center;padding:16px;color:var(--white-dim)">${lang==='am'?'ምንም የተመዘገበ ሪፈንድ የለም':'No refunds found'}</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ── PAST DAILY AGGREGATED SUMMARY ────────────────────────────────
+function renderPastDailySummary(containerId, targetDate) {
+  const date = targetDate || new Date().toISOString().slice(0,10);
+  const container = document.getElementById(containerId || 'pastDailySummaryContainer');
+  if (!container) return;
+
+  const sales = getData('sales').filter(s => !s.isWholesale && s.date === date);
+  const refunds = getData('refunds').filter(r => r.date === date);
+  const wholesale = getData('wholesale').filter(w => w.status === 'approved' && w.date === date);
+  const cutting = getData('cutting').filter(c => c.date === date);
+  const sewing = getData('sewing').filter(s => s.date === date);
+  const cuttingDmg = getData('cuttingDamage').filter(d => d.date === date);
+
+  // Sales Totals
+  const retailGross = sales.reduce((a, s) => a + (s.qty * s.price), 0);
+  const refundAmt = refunds.reduce((a, r) => a + (r.financialDiff || r.origTotal || 0), 0);
+  const wsTotal = wholesale.reduce((a, w) => a + w.total, 0);
+  const netRevenue = Math.max(0, retailGross - refundAmt) + wsTotal;
+
+  const cashSales = sales.filter(s => s.payment === 'cash').reduce((a, s) => a + (s.qty * s.price), 0);
+  const transferSales = sales.filter(s => s.payment === 'transfer').reduce((a, s) => a + (s.qty * s.price), 0);
+  const creditSales = sales.filter(s => s.payment === 'credit').reduce((a, s) => a + (s.qty * s.price), 0);
+
+  const prodSalesMap = {};
+  sales.forEach(s => {
+    prodSalesMap[s.product] = prodSalesMap[s.product] || { qty: 0, rev: 0 };
+    prodSalesMap[s.product].qty += s.qty;
+    prodSalesMap[s.product].rev += s.qty * s.price;
+  });
+
+  // Production Totals
+  const totalCuttingQty = cutting.reduce((a, c) => a + (c.qty || 0), 0);
+  const totalSewingQty = sewing.reduce((a, s) => a + (s.qty || 0), 0);
+  const totalSewingDmg = sewing.reduce((a, s) => a + (s.dmgQty || 0), 0) + cuttingDmg.reduce((a, d) => a + (d.qty || 0), 0);
+
+  const sewingDepts = getAllSewDepts();
+  const deptBreakdown = {};
+  Object.keys(sewingDepts).forEach(k => {
+    deptBreakdown[k] = sewing.filter(s => s.dept === k).reduce((a, s) => a + (s.qty || 0), 0);
+  });
+
+  container.innerHTML = `
+    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(79,195,247,0.3);border-radius:12px;padding:16px;margin-bottom:16px">
+      <!-- Header with Date Picker -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:22px">📅</span>
+          <div>
+            <h3 style="margin:0;color:#4FC3F7;font-size:16px">${lang==='am'?'የባለፈው ቀን የተጠቃለለ ሪፖርት':'Past Daily Aggregated Summary'}</h3>
+            <div style="font-size:11px;color:var(--white-dim);margin-top:2px">${lang==='am'?'የተመረጠውን ቀን የሽያጭና የምርት አጠቃላይ መረጃ':'Detailed breakdown of sales & production for chosen date'}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:var(--white-dim);font-weight:600">${lang==='am'?'ቀን ይምረጡ':'Pick Date'}:</span>
+          <input type="date" value="${date}" onchange="renderPastDailySummary('${containerId}', this.value)"
+            style="padding:6px 12px;background:rgba(255,255,255,0.08);border:1.5px solid rgba(79,195,247,0.4);border-radius:8px;color:var(--gold);font-weight:700;font-size:13px;outline:none" />
+        </div>
+      </div>
+
+      <!-- Side-by-Side Aggregated Summary Cards -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:14px">
+        <!-- Sales Aggregation Card -->
+        <div style="padding:14px;background:rgba(0,0,0,0.2);border:1px solid rgba(201,168,76,0.25);border-radius:10px">
+          <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:10px">🛍️ ${lang==='am'?'የቀኑ ሽያጭ ተጠቃለለ':'Daily Sales Summary'} (${date})</div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px">
+            <div style="padding:8px;background:rgba(201,168,76,0.08);border-radius:7px;text-align:center">
+              <div style="font-size:9.5px;color:rgba(197,203,216,0.5)">${lang==='am'?'አጠቃላይ ገቢ':'Net Revenue'}</div>
+              <div style="font-size:16px;font-weight:800;color:var(--gold)">${fmtMoney(netRevenue)}</div>
+            </div>
+            <div style="padding:8px;background:rgba(224,90,90,0.08);border-radius:7px;text-align:center">
+              <div style="font-size:9.5px;color:#FF9090">${lang==='am'?'ሪፈንድ':'Refunds'}</div>
+              <div style="font-size:16px;font-weight:800;color:#FF9090">-${fmtMoney(refundAmt)}</div>
+            </div>
+          </div>
+
+          <!-- Payment Breakdown -->
+          <div style="font-size:10px;font-weight:700;color:rgba(197,203,216,0.5);margin-bottom:6px">${lang==='am'?'በክፍያ ዓይነት':'BY PAYMENT METHOD'}</div>
+          <div style="display:flex;gap:6px;margin-bottom:10px">
+            <div style="flex:1;padding:6px;background:rgba(76,175,80,0.1);border-radius:6px;text-align:center">
+              <div style="font-size:9px;color:#80e080">💵 ጥሬ</div>
+              <div style="font-size:12px;font-weight:700;color:#80e080">${fmtMoney(cashSales)}</div>
+            </div>
+            <div style="flex:1;padding:6px;background:rgba(66,165,245,0.1);border-radius:6px;text-align:center">
+              <div style="font-size:9px;color:#90CAF9">📲 ዝውውር</div>
+              <div style="font-size:12px;font-weight:700;color:#90CAF9">${fmtMoney(transferSales)}</div>
+            </div>
+            <div style="flex:1;padding:6px;background:rgba(255,167,38,0.1);border-radius:6px;text-align:center">
+              <div style="font-size:9px;color:#FFCC80">🤝 ብድር</div>
+              <div style="font-size:12px;font-weight:700;color:#FFCC80">${fmtMoney(creditSales)}</div>
+            </div>
+          </div>
+
+          <!-- Items Sold Breakdown -->
+          <div style="font-size:10px;font-weight:700;color:rgba(197,203,216,0.5);margin-bottom:4px">${lang==='am'?'የተሸጡ አልባሳት':'ITEMS SOLD'}</div>
+          <div style="max-height:110px;overflow-y:auto;font-size:11px">
+            ${Object.keys(prodSalesMap).length ? Object.entries(prodSalesMap).map(([p, data]) => `
+              <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+                <span>${p}</span>
+                <span style="font-weight:700;color:var(--gold)">${data.qty} pcs (${fmtMoney(data.rev)})</span>
+              </div>`).join('') : `<div style="color:var(--white-dim);font-size:10px">${lang==='am'?'ምንም ሽያጭ የለም':'No sales recorded'}</div>`}
+          </div>
+        </div>
+
+        <!-- Production Aggregation Card -->
+        <div style="padding:14px;background:rgba(0,0,0,0.2);border:1px solid rgba(79,195,247,0.25);border-radius:10px">
+          <div style="font-size:12px;font-weight:700;color:#4FC3F7;margin-bottom:10px">📊 ${lang==='am'?'የቀኑ ምርት ተጠቃለለ':'Daily Production Summary'} (${date})</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">
+            <div style="padding:8px 4px;background:rgba(201,168,76,0.08);border-radius:7px;text-align:center">
+              <div style="font-size:9px;color:var(--gold)">✂️ ${lang==='am'?'ቆረጣ':'Cutting'}</div>
+              <div style="font-size:16px;font-weight:800;color:var(--gold)">${totalCuttingQty}</div>
+            </div>
+            <div style="padding:8px 4px;background:rgba(79,195,247,0.08);border-radius:7px;text-align:center">
+              <div style="font-size:9px;color:#4FC3F7">🪡 ${lang==='am'?'ስፌት':'Sewing'}</div>
+              <div style="font-size:16px;font-weight:800;color:#4FC3F7">${totalSewingQty}</div>
+            </div>
+            <div style="padding:8px 4px;background:rgba(224,90,90,0.08);border-radius:7px;text-align:center">
+              <div style="font-size:9px;color:#FF9090">⚠️ ${lang==='am'?'ዳሜጅ':'Damage'}</div>
+              <div style="font-size:16px;font-weight:800;color:#FF9090">${totalSewingDmg}</div>
+            </div>
+          </div>
+
+          <!-- Sewing Department Breakdown -->
+          <div style="font-size:10px;font-weight:700;color:rgba(197,203,216,0.5);margin-bottom:6px">${lang==='am'?'በስፌት ዘርፍ':'BY SEWING DEPARTMENT'}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${Object.entries(deptBreakdown).map(([k, qty]) => {
+              const d = sewingDepts[k] || { label: k, icon: '👤' };
+              return `<div style="flex:1;min-width:110px;padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:6px;display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:11px;color:var(--white)">${d.icon} ${d.label}</span>
+                <span style="font-size:12px;font-weight:700;color:#4FC3F7">${qty}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
