@@ -2316,7 +2316,10 @@ function renderCutting() {
     return Object.entries(m).sort((a,b)=>b[1]-a[1]).map(([t,q])=>`${t} <b>${q}</b>`).join(' · ')||'—';
   };
 
-  // ── 0. Incoming raw material from Store — awaiting confirmation ──
+  // ── 0. Toolbar & Incoming raw material from Store ──
+  const cutToSewBtn = document.getElementById('btnCutToSewing');
+  if (cutToSewBtn) cutToSewBtn.style.display = canActCutting() ? '' : 'none';
+
   const cutInEl = document.getElementById('cuttingStoreIncoming');
   if (cutInEl) {
     cutInEl.innerHTML = prodFlowPendingHTML('store_cutting', canActCutting(), 'confirmStoreToCutting',
@@ -2404,7 +2407,7 @@ function renderCutting() {
         const remaining = r.qty - (r.sentQty||0);
         const sendCell = remaining > 0
           ? (canActCutting()
-              ? `<button onclick="openCutToSewing('${r.id}')" style="padding:4px 9px;font-size:10px;font-weight:700;font-family:inherit;border-radius:7px;border:1px solid rgba(201,168,76,0.4);background:rgba(201,168,76,0.1);color:var(--gold);cursor:pointer;white-space:nowrap">📤 ${remaining}</button>`
+              ? `<button onclick="openCutToSewingModal('${r.id}')" style="padding:4px 10px;font-size:11px;font-weight:700;font-family:inherit;border-radius:7px;border:1px solid rgba(201,168,76,0.4);background:rgba(201,168,76,0.12);color:var(--gold);cursor:pointer;white-space:nowrap">📤 ${lang==='am'?'ወደ ስፌት':'To Sewing'} (${remaining})</button>`
               : `<span style="font-size:10px;color:rgba(197,203,216,0.4)">${remaining} ${lang==='am'?'ይቀራል':'left'}</span>`)
           : `<span style="font-size:10px;color:#80e080">✅ ${lang==='am'?'ተልኳል':'Sent'}</span>`;
         return `<tr>
@@ -6724,35 +6727,87 @@ function saveCutting() {
 
 // ── CUTTING → SEWING (cut pieces, tracked by type) ──
 function openCutToSewing(cutId) {
-  if (!canActCutting()) { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ቆረጣ ክፍል ብቻ ነው':'⛔ Only Cutting staff can do this','error'); return; }
-  const r = getData('cutting').find(x => x.id === cutId);
-  if (!r) return;
-  const remaining = r.qty - (r.sentQty||0);
-  if (remaining <= 0) { toast(lang==='am'?'ቀሪ የለም':'Nothing left to send','error'); return; }
+  openCutToSewingModal(cutId);
+}
+
+function openCutToSewingModal(selectedCutId) {
+  if (!canActCutting()) { 
+    toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ቆረጣ ክፍል ወይም ኦነር ብቻ ነው':'⛔ Only Cutting staff or Owner can do this','error'); 
+    return; 
+  }
+  const data = getData('cutting');
+  const available = data.filter(r => (r.qty - (r.sentQty || 0)) > 0);
+
+  if (!available.length) {
+    toast(lang==='am'?'ወደ ስፌት ክፍል የሚላክ ቀሪ የተቆረጠ አልባሳት የለም — አስቀድመው ቆረጣ ይመዝግቡ':'No cut items available to send to Sewing', 'warning');
+    return;
+  }
+
+  const defaultId = selectedCutId || available[0].id;
+  const initialRecord = available.find(x => x.id === defaultId) || available[0];
+  const initialRemaining = initialRecord.qty - (initialRecord.sentQty || 0);
 
   const modal = document.createElement('div');
   modal.id = 'cutToSewModal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  
   modal.innerHTML = `
-    <div style="background:#1a1f2e;border-radius:14px;padding:20px;width:100%;max-width:380px;border:1px solid rgba(255,255,255,0.1)">
+    <div style="background:#1a1f2e;border-radius:14px;padding:20px;width:100%;max-width:400px;border:1px solid rgba(255,255,255,0.1)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <h3 style="color:var(--gold);font-size:15px;margin:0">🪡 ${r.type} → ${lang==='am'?'ስፌት ክፍል':'Sewing'}</h3>
+        <h3 style="color:var(--gold);font-size:15px;margin:0">🪡 ${lang==='am'?'የተቆረጠ አልባሳት ወደ ስፌት ክፍል ላክ':'Send Cut Fabric to Sewing'}</h3>
         <button onclick="document.getElementById('cutToSewModal').remove()" style="background:rgba(255,255,255,0.06);border:none;color:var(--white-dim);width:28px;height:28px;border-radius:8px;cursor:pointer">✕</button>
       </div>
-      <div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:9px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--white)">
-        ✂️ ${lang==='am'?'ያልተላከ ቀሪ':'Not yet sent'}: <strong style="color:var(--gold)">${remaining}</strong>
+
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">${lang==='am'?'የተቆረጠ አልባሳት ምረጥ *':'Select Cut Garment *'}</div>
+        <select id="ctsSelect" onchange="updateCutToSewModalRemaining()" style="width:100%;padding:9px 12px;background:#0f1420;border:1px solid rgba(201,168,76,0.3);border-radius:9px;color:var(--white);font-family:inherit;font-size:13.5px;font-weight:600;outline:none">
+          ${available.map(r => {
+            const rem = r.qty - (r.sentQty || 0);
+            return `<option value="${r.id}" data-rem="${rem}" ${r.id === defaultId ? 'selected' : ''}>
+              ${r.type} (${r.date}) — ${lang==='am'?'ቀሪ':'remaining'}: ${rem} pcs
+            </option>`;
+          }).join('')}
+        </select>
       </div>
+
+      <div id="ctsRemBanner" style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:9px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--white)">
+        ✂️ ${lang==='am'?'ያልተላከ ቀሪ':'Not yet sent'}: <strong id="ctsRemText" style="color:var(--gold)">${initialRemaining}</strong>
+      </div>
+
       <div style="margin-bottom:16px">
-        <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">${lang==='am'?'ብዛት':'Quantity'} (max: ${remaining})</div>
-        <input id="ctsQty" type="number" min="1" max="${remaining}" value="${remaining}"
+        <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">${lang==='am'?'የሚላክ ብዛት *':'Quantity to Send *'}</div>
+        <input id="ctsQty" type="number" min="1" max="${initialRemaining}" value="${initialRemaining}"
           style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.3);border-radius:9px;color:var(--white);font-family:inherit;font-size:14px;font-weight:700;outline:none;box-sizing:border-box" />
       </div>
+
       <div style="display:flex;gap:10px">
-        <button onclick="saveCutToSewing('${cutId}')" style="flex:1;padding:11px;background:linear-gradient(135deg,var(--gold),#A87820);color:var(--navy);border:none;border-radius:9px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer">📤 ${lang==='am'?'ላክ':'Send'}</button>
+        <button onclick="submitCutToSewingModal()" style="flex:1;padding:11px;background:linear-gradient(135deg,var(--gold),#A87820);color:var(--navy);border:none;border-radius:9px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer">📤 ${lang==='am'?'ላክ':'Send'}</button>
         <button onclick="document.getElementById('cutToSewModal').remove()" style="padding:11px 18px;background:transparent;border:1px solid rgba(255,255,255,0.15);color:var(--white-dim);border-radius:9px;font-family:inherit;cursor:pointer">${lang==='am'?'ሰርዝ':'Cancel'}</button>
       </div>
     </div>`;
+
   document.body.appendChild(modal);
+}
+
+function updateCutToSewModalRemaining() {
+  const sel = document.getElementById('ctsSelect');
+  if (!sel) return;
+  const opt = sel.options[sel.selectedIndex];
+  const rem = parseInt(opt.dataset.rem || '0');
+  const remText = document.getElementById('ctsRemText');
+  const qtyInput = document.getElementById('ctsQty');
+  if (remText) remText.textContent = rem;
+  if (qtyInput) {
+    qtyInput.max = rem;
+    qtyInput.value = rem;
+  }
+}
+
+function submitCutToSewingModal() {
+  const sel = document.getElementById('ctsSelect');
+  if (!sel) return;
+  const cutId = sel.value;
+  saveCutToSewing(cutId);
 }
 
 function saveCutToSewing(cutId) {
