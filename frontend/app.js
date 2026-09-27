@@ -811,26 +811,29 @@ function getNavBadgeCount(id, role) {
   } else if (id === 'store' && role === 'owner') {
     // store→branch transfers awaiting owner approval + incoming shipments awaiting store confirmation
     const pendingBranchTr = getData('storeTransfers').filter(t => t.status === 'pending_owner').length;
-    const incomingProc = getData('prodFlow').filter(x => x.stage==='proc_store' && x.status==='pending').length;
-    const incomingSew  = getData('prodFlow').filter(x => x.stage==='sewing_store' && x.status==='pending').length;
+    const incomingProc = getData('prodFlow').filter(x => x.stage==='proc_store' && (x.status==='pending'||x.status==='approved')).length;
+    const incomingSew  = getData('prodFlow').filter(x => x.stage==='sewing_store' && (x.status==='pending'||x.status==='approved')).length;
     badgeCount = pendingBranchTr + incomingProc + incomingSew;
     badgeColor = '#FFA726';
   } else if (id === 'store' && role === 'store') {
     // incoming shipments (from Procurement + Sewing) awaiting this store staff's confirmation
-    badgeCount = getData('prodFlow').filter(x => (x.stage==='proc_store'||x.stage==='sewing_store') && x.status==='pending').length;
+    badgeCount = getData('prodFlow').filter(x => (x.stage==='proc_store'||x.stage==='sewing_store') && (x.status==='pending'||x.status==='approved')).length;
     badgeColor = '#4FC3F7';
   } else if (id === 'cutting' && (role === 'cutting' || role === 'owner')) {
     // incoming raw material from Store awaiting confirmation
-    badgeCount = getData('prodFlow').filter(x => x.stage==='store_cutting' && x.status==='pending').length;
+    badgeCount = getData('prodFlow').filter(x => x.stage==='store_cutting' && (x.status==='pending'||x.status==='approved')).length;
     badgeColor = '#4FC3F7';
   } else if (id === 'sewing' && (role === 'sewing' || role === 'owner')) {
     // incoming cut pieces from Cutting awaiting confirmation
-    badgeCount = getData('prodFlow').filter(x => x.stage==='cutting_sewing' && x.status==='pending').length;
+    badgeCount = getData('prodFlow').filter(x => x.stage==='cutting_sewing' && (x.status==='pending'||x.status==='approved')).length;
     badgeColor = '#4FC3F7';
   } else if (id === 'dashboard' && role === 'owner') {
-    // combine pending store transfers + pending wholesale
+    // combine pending store transfers + pending wholesale + pending production transfers
     const wsPending = getData('wholesale').filter(w => w.status === 'pending').length;
-    badgeCount = getData('pendingTransfers').filter(p => p.status === 'pending').length + wsPending;
+    const strPending = getData('storeTransfers').filter(t => t.status === 'pending_owner').length;
+    const prodFlowPending = getData('prodFlow').filter(x => x.status === 'pending_owner').length;
+    const editPending = getData('pendingEdits').filter(e => e.status === 'pending').length;
+    badgeCount = getData('pendingTransfers').filter(p => p.status === 'pending').length + wsPending + strPending + prodFlowPending + editPending;
     badgeColor = '#FFA726';
   } else if (id === 'sales' && role === 'sales') {
     // incoming transfers + branch loans ready for this sales staff to confirm receipt
@@ -1871,18 +1874,25 @@ function canActCutting()     { return !!currentUser && (currentUser.role === 'ow
 
 // Reusable "incoming — awaiting confirmation" list block used on Store/Cutting/Sewing pages
 function prodFlowPendingHTML(stage, canConfirm, confirmFnName, itemLabelFn) {
-  const items = getProdFlow(stage).filter(x => x.status === 'pending');
+  const items = getProdFlow(stage).filter(x => x.status === 'pending' || x.status === 'approved' || x.status === 'pending_owner');
   if (!items.length) return '';
   return `<div style="background:rgba(79,195,247,0.06);border:1px solid rgba(79,195,247,0.25);border-radius:10px;padding:10px 12px;margin-bottom:12px">
     <div style="font-size:11px;font-weight:700;color:#4FC3F7;letter-spacing:0.5px;margin-bottom:8px">📥 ${lang==='am'?'የደረሱ — ማረጋገጫ ይጠብቃሉ':'INCOMING — AWAITING CONFIRMATION'} (${items.length})</div>
-    ${items.map(x => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid rgba(255,255,255,0.06)">
-      <div style="font-size:12px;color:var(--white);font-weight:600">${itemLabelFn(x)}
-        <div style="font-size:10px;color:var(--white-dim);font-weight:400;margin-top:2px">${x.date} · ${lang==='am'?'ላከ':'from'}: ${x.sentByName||x.sentBy||'—'}</div>
-      </div>
-      ${canConfirm
-        ? `<button onclick="${confirmFnName}('${x.id}')" style="flex-shrink:0;padding:6px 12px;font-size:11px;font-weight:700;font-family:inherit;border-radius:8px;border:1px solid rgba(76,175,80,0.5);background:rgba(76,175,80,0.12);color:#80e080;cursor:pointer">✅ ${lang==='am'?'ተቀበልኩ':'Confirm'}</button>`
-        : `<span style="flex-shrink:0;font-size:10px;font-weight:700;color:#FFA726">⏳ ${lang==='am'?'ይጠበቃል':'Pending'}</span>`}
-    </div>`).join('')}
+    ${items.map(x => {
+      const isPendingOwner = x.status === 'pending_owner';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid rgba(255,255,255,0.06)">
+        <div style="font-size:12px;color:var(--white);font-weight:600">${itemLabelFn(x)}
+          <div style="font-size:10px;color:var(--white-dim);font-weight:400;margin-top:2px">${x.date} · ${lang==='am'?'ላከ':'from'}: ${x.sentByName||x.sentBy||'—'}</div>
+        </div>
+        ${isPendingOwner
+          ? `<span style="flex-shrink:0;font-size:10px;font-weight:700;color:#FFA726;padding:4px 8px;background:rgba(255,167,38,0.12);border:1px solid rgba(255,167,38,0.3);border-radius:6px">⏳ ${lang==='am'?'የኦነር ፈቃድ ይጠበቃል':'Awaiting Owner Approval'}</span>`
+          : (canConfirm
+            ? `<button onclick="${confirmFnName}('${x.id}')" style="flex-shrink:0;padding:6px 12px;font-size:11px;font-weight:700;font-family:inherit;border-radius:8px;border:1px solid rgba(76,175,80,0.5);background:rgba(76,175,80,0.12);color:#80e080;cursor:pointer">✅ ${lang==='am'?'ተቀበልኩ':'Confirm'}</button>`
+            : `<span style="flex-shrink:0;font-size:10px;font-weight:700;color:#FFA726">⏳ ${lang==='am'?'ይጠበቃል':'Pending'}</span>`
+          )
+        }
+      </div>`;
+    }).join('')}
   </div>`;
 }
 
@@ -6778,7 +6788,7 @@ function confirmCutToSewing(id) {
   const ex = pool.find(p => p.type === x.type);
   if (ex) ex.qty += x.qty; else pool.push({ id:uid(), type:x.type, qty:x.qty });
   saveData('sewingCutStock', pool);
-  renderSewing(); renderCutting();
+  renderSewing(); renderCutting(); buildSidebar();
   toast(lang==='am'?`✅ ${x.qty} ${x.type} ተረጋግጦ ገባ`:`✅ Confirmed — ${x.qty} ${x.type} received`);
 }
 
@@ -8150,6 +8160,7 @@ function approveProdFlowTransfer(id) {
   if (!x) return;
   refreshActivePanel();
   renderDashboard();
+  buildSidebar();
   toast(lang==='am'?`✅ የ${x.type} ዝውውር ፀድቋል — ተቀባዩ ክፍል ሊያረጋግጥ ይችላል`:`✅ Transfer of ${x.type} approved — target dept can confirm`);
 }
 
@@ -8345,7 +8356,7 @@ function renderPastDailySummary(containerId, targetDate) {
   const sewing = getData('sewing').filter(s => s.date === date);
   const cuttingDmg = getData('cuttingDamage').filter(d => d.date === date);
 
-  // Sales Totals
+  // Overall Sales Totals
   const retailGross = sales.reduce((a, s) => a + (s.qty * s.price), 0);
   const refundAmt = refunds.reduce((a, r) => a + (r.financialDiff || r.origTotal || 0), 0);
   const wsTotal = wholesale.reduce((a, w) => a + w.total, 0);
@@ -8373,6 +8384,77 @@ function renderPastDailySummary(containerId, targetDate) {
     deptBreakdown[k] = sewing.filter(s => s.dept === k).reduce((a, s) => a + (s.qty || 0), 0);
   });
 
+  // Per-Shop / Branch Breakdown
+  const branches = getData('branches');
+  const salesBranches = branches.filter(b => !b.noSales);
+
+  const branchCardsHTML = salesBranches.map(b => {
+    const bSales = sales.filter(s => s.branch === b.id);
+    const bRefunds = refunds.filter(r => r.branch === b.id);
+    const bWs = wholesale.filter(w => w.branch === b.id);
+
+    const bRetailGross = bSales.reduce((a, s) => a + (s.qty * s.price), 0);
+    const bRefAmt = bRefunds.reduce((a, r) => a + (r.financialDiff || r.origTotal || 0), 0);
+    const bRetailNet = Math.max(0, bRetailGross - bRefAmt);
+    const bWsNet = bWs.reduce((a, w) => a + w.total, 0);
+    const bNetRev = bRetailNet + bWsNet;
+
+    const bCash = Math.max(0, bSales.filter(s => s.payment === 'cash').reduce((a, s) => a + (s.qty * s.price), 0) - bRefunds.filter(r => r.payment === 'cash').reduce((a, r) => a + (r.financialDiff || r.origTotal || 0), 0)) + bWs.filter(w => w.payment === 'cash').reduce((a, w) => a + w.total, 0);
+    const bTransfer = Math.max(0, bSales.filter(s => s.payment === 'transfer').reduce((a, s) => a + (s.qty * s.price), 0) - bRefunds.filter(r => r.payment === 'transfer').reduce((a, r) => a + (r.financialDiff || r.origTotal || 0), 0)) + bWs.filter(w => w.payment === 'transfer').reduce((a, w) => a + w.total, 0);
+    const bCredit = Math.max(0, bSales.filter(s => s.payment === 'credit').reduce((a, s) => a + (s.qty * s.price), 0) - bRefunds.filter(r => r.payment === 'credit').reduce((a, r) => a + (r.financialDiff || r.origTotal || 0), 0)) + bWs.filter(w => w.payment === 'credit').reduce((a, w) => a + w.total, 0);
+
+    const bProdMap = {};
+    bSales.forEach(s => {
+      bProdMap[s.product] = bProdMap[s.product] || { qty: 0, rev: 0 };
+      bProdMap[s.product].qty += s.qty;
+      bProdMap[s.product].rev += s.qty * s.price;
+    });
+
+    return `
+      <div class="past-daily-branch-card" data-branch="${b.id}" style="background:rgba(0,0,0,0.25);border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.06)">
+          <div style="font-size:13px;font-weight:700;color:var(--white)">🏪 ${b.name}</div>
+          <div style="font-size:14px;font-weight:800;color:var(--gold)">${fmtMoney(bNetRev)}</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px;text-align:center">
+          <div style="padding:5px 3px;background:rgba(255,255,255,0.03);border-radius:6px">
+            <div style="font-size:9px;color:rgba(197,203,216,0.5)">${lang==='am'?'ኖርማል':'Retail'}</div>
+            <div style="font-size:11px;font-weight:700;color:var(--white)">${fmtMoney(bRetailNet)} <small style="font-size:9px;color:rgba(197,203,216,0.4)">(${bSales.length})</small></div>
+          </div>
+          <div style="padding:5px 3px;background:rgba(79,195,247,0.06);border-radius:6px">
+            <div style="font-size:9px;color:#4FC3F7">${lang==='am'?'ጅምላ':'Wholesale'}</div>
+            <div style="font-size:11px;font-weight:700;color:#4FC3F7">${fmtMoney(bWsNet)} <small style="font-size:9px;color:rgba(79,195,247,0.6)">(${bWs.length})</small></div>
+          </div>
+          <div style="padding:5px 3px;background:rgba(224,90,90,0.06);border-radius:6px">
+            <div style="font-size:9px;color:#FF9090">${lang==='am'?'ሪፈንድ':'Refund'}</div>
+            <div style="font-size:11px;font-weight:700;color:#FF9090">-${fmtMoney(bRefAmt)}</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:4px;margin-bottom:8px;font-size:10px">
+          <div style="flex:1;padding:4px;background:rgba(76,175,80,0.08);border-radius:5px;text-align:center">
+            <span style="color:#80e080;font-weight:600">💵 ጥሬ: ${fmtMoney(bCash)}</span>
+          </div>
+          <div style="flex:1;padding:4px;background:rgba(66,165,245,0.08);border-radius:5px;text-align:center">
+            <span style="color:#90CAF9;font-weight:600">📲 ፉል: ${fmtMoney(bTransfer)}</span>
+          </div>
+          <div style="flex:1;padding:4px;background:rgba(255,167,38,0.08);border-radius:5px;text-align:center">
+            <span style="color:#FFCC80;font-weight:600">🤝 ብድር: ${fmtMoney(bCredit)}</span>
+          </div>
+        </div>
+
+        <div style="font-size:9.5px;color:rgba(197,203,216,0.5);font-weight:700;margin-bottom:4px">${lang==='am'?'በዚህ ሱቅ የተሸጡ አልባሳት':'ITEMS SOLD AT THIS SHOP'}</div>
+        <div style="max-height:85px;overflow-y:auto;font-size:10.5px">
+          ${Object.keys(bProdMap).length ? Object.entries(bProdMap).map(([p, data]) => `
+            <div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.03)">
+              <span style="color:var(--white-dim)">${p}</span>
+              <span style="font-weight:700;color:var(--gold)">${data.qty} pcs (${fmtMoney(data.rev)})</span>
+            </div>`).join('') : `<div style="color:var(--white-dim);font-size:9.5px">${lang==='am'?'በዚህ ቀን በዚህ ሱቅ ምንም ሽያጭ የለም':'No sales recorded for this shop'}</div>`}
+        </div>
+      </div>`;
+  }).join('');
+
   container.innerHTML = `
     <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(79,195,247,0.3);border-radius:12px;padding:14px;margin-bottom:16px">
       <!-- Header Banner -->
@@ -8384,7 +8466,7 @@ function renderPastDailySummary(containerId, targetDate) {
               ${lang==='am'?'የባለፈው ቀን የተጠቃለለ ሪፖርት':'Past Daily Aggregated Summary'}
               <span style="font-size:12px;font-weight:700;color:var(--gold);background:rgba(201,168,76,0.1);padding:2px 8px;border-radius:8px;border:1px solid rgba(201,168,76,0.25)">${date}</span>
             </h3>
-            <div style="font-size:11px;color:var(--white-dim);margin-top:2px">${lang==='am'?'የተመረጠውን ቀን የሽያጭና የምርት አጠቃላይ መረጃ':'Detailed breakdown of sales & production for chosen date'}</div>
+            <div style="font-size:11px;color:var(--white-dim);margin-top:2px">${lang==='am'?'የተመረጠውን ቀን የሽያጭና የምርት አጠቃላይ እና የየሱቆቹ መረጃ':'Detailed overall and per-shop sales & production breakdown for chosen date'}</div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -8400,7 +8482,7 @@ function renderPastDailySummary(containerId, targetDate) {
         <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:14px">
           <!-- Sales Aggregation Card -->
           <div style="padding:14px;background:rgba(0,0,0,0.2);border:1px solid rgba(201,168,76,0.25);border-radius:10px">
-            <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:10px">🛍️ ${lang==='am'?'የቀኑ ሽያጭ ተጠቃለለ':'Daily Sales Summary'} (${date})</div>
+            <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:10px">🛍️ ${lang==='am'?'የቀኑ ሽያጭ ተጠቃለለ (አጠቃላይ)':'Daily Sales Summary (Total)'} (${date})</div>
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px">
               <div style="padding:8px;background:rgba(201,168,76,0.08);border-radius:7px;text-align:center">
                 <div style="font-size:9.5px;color:rgba(197,203,216,0.5)">${lang==='am'?'አጠቃላይ ገቢ':'Net Revenue'}</div>
@@ -8471,8 +8553,38 @@ function renderPastDailySummary(containerId, targetDate) {
             </div>
           </div>
         </div>
+
+        <!-- Per-Shop Breakdown Section -->
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.08)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+            <div style="font-size:12.5px;font-weight:700;color:var(--gold);display:flex;align-items:center;gap:6px">
+              🏪 ${lang==='am'?'የየሱቆቹ የለየብቻው የዕለቱ ሽያጭ መረጃ':'Per-Shop Daily Sales Breakdown'} (${date})
+            </div>
+            <select id="${targetId}_branchFilter" onchange="filterPastDailyBranch('${targetId}')" style="padding:4px 10px;background:#0f1420;border:1px solid rgba(255,255,255,0.15);border-radius:7px;color:var(--white);font-size:11.5px;outline:none;font-family:inherit">
+              <option value="all">🏪 ${lang==='am'?'ሁሉም ሱቆች':'All Shops'}</option>
+              ${salesBranches.map(b => `<option value="${b.id}">🏪 ${b.name}</option>`).join('')}
+            </select>
+          </div>
+
+          <div id="${targetId}_branchGrid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px">
+            ${branchCardsHTML}
+          </div>
+        </div>
+
       </div>
     </div>`;
+}
+
+function filterPastDailyBranch(targetId) {
+  const filterVal = document.getElementById(`${targetId}_branchFilter`)?.value || 'all';
+  const cards = document.querySelectorAll(`#${targetId}_branchGrid .past-daily-branch-card`);
+  cards.forEach(card => {
+    if (filterVal === 'all' || card.dataset.branch === filterVal) {
+      card.style.display = 'block';
+    } else {
+      card.style.display = 'none';
+    }
+  });
 }
 
 function toggleDashboardReport(containerId) {
