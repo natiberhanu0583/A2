@@ -148,7 +148,7 @@ const LABELS = {
 };
 const WATCHED_KEY_ROLES = {
   procurementOrders: ['owner'],
-  storeTransfers: ['owner', 'store'],
+  storeTransfers: ['owner', 'store', 'sales'],
   pendingTransfers: ['owner', 'store'],
   wholesale: ['owner'],
   branchLoans: ['owner'],
@@ -232,11 +232,54 @@ app.post('/api/sync/:key', async (req, res) => {
   const key = req.params.key;
   if (key === 'users') return res.status(400).json({ error: 'Use /api/users to manage user accounts' });
   try {
-    const { value } = req.body || {};
+    const { value, deletedId, deletedIds } = req.body || {};
     const oldValue = await db.getKey(key);
-    await db.setKey(key, value);
-    res.json({ ok: true });
-    maybeNotify(key, oldValue, value, req.user.username); // fire-and-forget
+
+    let finalValue = value;
+
+    // Smart non-destructive merge for Array data (prevents concurrent departments from overwriting each other)
+    if (Array.isArray(oldValue) && Array.isArray(value)) {
+      const delSet = new Set();
+      if (deletedId) delSet.add(String(deletedId));
+      if (Array.isArray(deletedIds)) deletedIds.forEach(id => delSet.add(String(id)));
+
+      const getItemKey = item => {
+        if (!item || typeof item !== 'object') return null;
+        if (item.id !== undefined && item.id !== null) return 'id:' + item.id;
+        if (item._id !== undefined && item._id !== null) return 'id:' + item._id;
+        if (item.name !== undefined && item.name !== null) return 'name:' + item.name;
+        if (item.type !== undefined && item.type !== null && item.date !== undefined) return 'td:' + item.type + ':' + item.date;
+        return null;
+      };
+
+      const map = new Map();
+      // First, seed with all items from oldValue (persisted server state)
+      oldValue.forEach(item => {
+        const k = getItemKey(item);
+        if (k && !delSet.has(String(item.id))) {
+          map.set(k, item);
+        }
+      });
+
+      // Next, overlay with all items from incoming client value (updates and new additions)
+      value.forEach(item => {
+        const k = getItemKey(item);
+        if (k && !delSet.has(String(item.id))) {
+          map.set(k, item);
+        }
+      });
+
+      // Ensure explicitly deleted IDs are removed
+      delSet.forEach(delId => {
+        map.delete('id:' + delId);
+      });
+
+      finalValue = Array.from(map.values());
+    }
+
+    await db.setKey(key, finalValue);
+    res.json({ ok: true, value: finalValue });
+    maybeNotify(key, oldValue, finalValue, req.user.username); // fire-and-forget
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Failed to save data' });

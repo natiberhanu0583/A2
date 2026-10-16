@@ -118,16 +118,57 @@ const SALES_LOW = 5;   // sales low stock threshold
 function loadData(key, def) {
   try { return JSON.parse(localStorage.getItem('a2_' + key)) || def; } catch { return def; }
 }
-function saveData(key, val) {
+function saveData(key, val, deletedId) {
   localStorage.setItem('a2_' + key, JSON.stringify(val));
-  if (key !== 'users') syncToServer(key, val); // `users` never goes through the generic endpoint — see refreshUsersCache()/user-management functions below
+  if (key !== 'users') syncToServer(key, val, deletedId); // `users` never goes through generic endpoint
 }
 function getData(key) { return loadData(key, []); }
 
+// ── SYNC OUTBOX (prevents offline data loss or transfer overwrites) ──
+function getSyncOutbox() {
+  try { return JSON.parse(localStorage.getItem('a2_syncOutbox') || '{}'); } catch { return {}; }
+}
+function addToSyncOutbox(key, val, deletedId) {
+  const box = getSyncOutbox();
+  box[key] = { value: val, deletedId, time: Date.now() };
+  localStorage.setItem('a2_syncOutbox', JSON.stringify(box));
+}
+function clearSyncOutboxItem(key) {
+  const box = getSyncOutbox();
+  if (box[key]) {
+    delete box[key];
+    localStorage.setItem('a2_syncOutbox', JSON.stringify(box));
+  }
+}
+async function flushSyncOutbox() {
+  const box = getSyncOutbox();
+  const keys = Object.keys(box);
+  if (!keys.length) return;
+  for (const k of keys) {
+    const entry = box[k];
+    if (!entry) continue;
+    try {
+      const res = await fetch('/api/sync/' + encodeURIComponent(k), {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({ value: entry.value, deletedId: entry.deletedId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.value !== undefined) {
+          localStorage.setItem('a2_' + k, JSON.stringify(data.value));
+        }
+        clearSyncOutboxItem(k);
+      }
+    } catch {
+      // Still offline, will retry next cycle
+    }
+  }
+}
+window.addEventListener('online', flushSyncOutbox);
+
 // ── SERVER SYNC (shared backend, so data + notifications work across
 // devices/branches and even when a user's own browser is fully closed) ──
-// Real login sessions (JWT), not a shared static secret: every request
-// carries the token issued by POST /api/auth/login.
 function getAuthToken() { return localStorage.getItem('a2_authToken') || ''; }
 function setAuthToken(t) { if (t) localStorage.setItem('a2_authToken', t); else localStorage.removeItem('a2_authToken'); }
 function apiHeaders() {
@@ -136,8 +177,6 @@ function apiHeaders() {
   if (token) h['Authorization'] = 'Bearer ' + token;
   return h;
 }
-// Wrapper around fetch that returns parsed JSON and throws a readable
-// Error (with the server's message) on any non-2xx response.
 async function apiFetch(url, options = {}) {
   const res = await fetch(url, { ...options, headers: { ...apiHeaders(), ...(options.headers || {}) } });
   let body = null;
@@ -148,32 +187,47 @@ async function apiFetch(url, options = {}) {
   }
   return body;
 }
-async function syncToServer(key, val) {
+async function syncToServer(key, val, deletedId) {
   try {
-    await fetch('/api/sync/' + encodeURIComponent(key), {
+    const res = await fetch('/api/sync/' + encodeURIComponent(key), {
       method: 'POST',
       headers: apiHeaders(),
-      body: JSON.stringify({ value: val }),
+      body: JSON.stringify({ value: val, deletedId }),
     });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.value !== undefined) {
+        localStorage.setItem('a2_' + key, JSON.stringify(data.value));
+      }
+      clearSyncOutboxItem(key);
+      return true;
+    } else {
+      addToSyncOutbox(key, val, deletedId);
+      return false;
+    }
   } catch (e) {
-    // Offline or server unreachable — localStorage already has the latest
-    // data locally, so nothing is lost; it will sync again on the next save.
+    addToSyncOutbox(key, val, deletedId);
+    return false;
   }
 }
-// Pulls the full dataset (everything except `users`) from the server into
-// localStorage. Call this before rendering, so every device starts from
-// the shared latest data.
 async function pullFromServer() {
+  // Always flush any local pending transfers/edits first so they are never overwritten!
+  await flushSyncOutbox();
+
   try {
     const res = await fetch('/api/sync', { headers: apiHeaders() });
     if (!res.ok) return false;
     const all = await res.json();
+    const box = getSyncOutbox();
     Object.keys(all).forEach(key => {
-      if (all[key] !== undefined) localStorage.setItem('a2_' + key, JSON.stringify(all[key]));
+      // Do not overwrite keys that have un-flushed offline edits!
+      if (!box[key] && all[key] !== undefined) {
+        localStorage.setItem('a2_' + key, JSON.stringify(all[key]));
+      }
     });
     return true;
   } catch (e) {
-    return false; // offline — fall back to whatever is already in localStorage
+    return false;
   }
 }
 // Refreshes the local (password-free) users cache from the authoritative
@@ -3155,14 +3209,15 @@ function rejectStoreTransfer(id) {
   toast(lang==='am'?'❌ ውድቅ — ዕቃ ወደ ስቶር ተመልሷል':'❌ Rejected — stock returned to store');
 }
 
-// ── RECEIVER (sales staff): confirm receipt → stock enters branch
+// ── RECEIVER (sales staff or owner): confirm receipt → stock enters branch
 function confirmStoreTransferReceipt(id) {
   const transfers=getData('storeTransfers');
   const t=transfers.find(x=>x.id===id);
   if(!t) return;
-  // Security: only the sales staff of the matching branch can confirm receipt
-  if(currentUser.role !== 'sales' || currentUser.branch !== t.branch) {
-    toast(lang==='am'?'⛔ ይህን ለማረጋገጥ ፈቃድ የለዎትም':'⛔ Only the branch sales staff can confirm receipt', 'error');
+  // Security: only the sales staff of the matching branch or owner can confirm receipt
+  const canConfirm = (currentUser.role === 'sales' && currentUser.branch === t.branch) || currentUser.role === 'owner';
+  if(!canConfirm) {
+    toast(lang==='am'?'⛔ ይህን ለማረጋገጥ ፈቃድ የለዎትም':'⛔ Only the branch sales staff or owner can confirm receipt', 'error');
     return;
   }
   t.status='confirmed';
@@ -3448,7 +3503,7 @@ function renderPOS() {
   const incomingBanner = document.getElementById('posIncomingBanner');
   if (incomingBanner) {
     const incomingTransfers = getData('storeTransfers').filter(
-      t => t.status === 'pending_receiver' && t.branch === currentUser.branch
+      t => (t.status === 'pending_receiver' || t.status === 'pending_owner') && t.branch === currentUser.branch
     );
     if (incomingTransfers.length) {
       incomingBanner.innerHTML = `
@@ -3460,15 +3515,20 @@ function renderPOS() {
           ${incomingTransfers.map(t => {
             const _itemsList = t.items && t.items.length ? t.items : [{type: t.type, qty: t.qty}];
             const itemsStr = _itemsList.map(x=>`<b style="color:var(--white)">${x.type||x.product||'—'}</b> ×${x.qty}`).join(', ');
-            const sentBy = t.sentBy || t.by || '—';
+            const sentBy = t.sentByName || t.sentBy || t.by || '—';
+            const isApproved = t.status === 'pending_receiver';
+            const statusNotice = isApproved 
+              ? `<span style="font-size:11px;color:#80e080;font-weight:600">✅ ${lang==='am'?'በኦነር የፀደቀ':'Approved'}</span>`
+              : `<span style="font-size:11px;color:#FFA726;font-weight:600">🚚 ${lang==='am'?'በመንገድ ላይ ያለ':'In Transit'}</span>`;
+
             return `<div style="background:rgba(0,0,0,0.25);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
               <div>
-                <div style="font-size:13px;color:#4FC3F7;margin-bottom:3px">📤 ${itemsStr}</div>
-                <div style="font-size:11px;color:var(--white-dim)">👤 ${lang==='am'?'የላከ':'Sent by'}: <b style="color:var(--white)">${sentBy}</b> &nbsp;|&nbsp; 📅 ${t.date||''}</div>
+                <div style="font-size:13px;color:#4FC3F7;margin-bottom:3px">📤 ${itemsStr} &nbsp;${statusNotice}</div>
+                <div style="font-size:11px;color:var(--white-dim)">👤 ${lang==='am'?'የላከ':'Sent by'}: <b style="color:var(--white)">${sentBy}</b> ${t.carrier ? `· 🚚 ተሸካሚ: <b>${t.carrier}</b>` : ''} &nbsp;|&nbsp; 📅 ${t.date||''}</div>
               </div>
               <button onclick="confirmStoreTransferReceipt('${t.id}')"
                 style="padding:8px 16px;border-radius:9px;border:1.5px solid #4FC3F7;background:rgba(79,195,247,0.15);color:#4FC3F7;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;white-space:nowrap">
-                ✅ ${lang==='am'?'ተቀብያለሁ':'Confirm Receipt'}
+                📥 ${lang==='am'?'ተቀብያለሁ':'Confirm Receipt'}
               </button>
             </div>`;
           }).join('')}
@@ -5704,7 +5764,7 @@ function requestDelete(dataKey, id) {
 function directDelete(dataKey, id) {
   if (!confirm(lang==='am'?'ሰርዝ?':'Delete this record?')) return;
   const data=getData(dataKey).filter(r=>r.id!==id);
-  saveData(dataKey,data); refreshActivePanel();
+  saveData(dataKey,data, id); refreshActivePanel();
   toast(lang==='am'?'ተሰርዟል':'Deleted');
 }
 
@@ -5712,14 +5772,14 @@ function approveDelete(pendingId) {
   const pending=getData('pendingDeletes');
   const req=pending.find(p=>p.id===pendingId); if (!req) return;
   const data=getData(req.dataKey).filter(r=>r.id!==req.recordId);
-  saveData(req.dataKey,data);
-  saveData('pendingDeletes',pending.filter(p=>p.id!==pendingId));
+  saveData(req.dataKey,data, req.recordId);
+  saveData('pendingDeletes',pending.filter(p=>p.id!==pendingId), pendingId);
   refreshActivePanel();
   toast(lang==='am'?'ስረዛ ፀድቋል ✓':'Delete approved ✓');
 }
 
 function rejectDelete(pendingId) {
-  saveData('pendingDeletes',getData('pendingDeletes').filter(p=>p.id!==pendingId));
+  saveData('pendingDeletes',getData('pendingDeletes').filter(p=>p.id!==pendingId), pendingId);
   refreshActivePanel(); toast(lang==='am'?'ስረዛ ውድቅ ሆኗል':'Delete rejected');
 }
 
