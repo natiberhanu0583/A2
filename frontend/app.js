@@ -4954,14 +4954,17 @@ function markProcurementReceived(id) {
 
 // Store confirms raw material physically arrived — this is what actually credits store's raw stock
 function confirmProcToStore(id) {
-  if (!canActStore()) { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው እቃ ቤት ብቻ ነው':'⛔ Only Store staff can confirm this','error'); return; }
+  if (!canActStore() && currentUser.role !== 'owner') { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው እቃ ቤት ወይም ኦነር ብቻ ነው':'⛔ Only Store staff or Owner can confirm this','error'); return; }
   const x = updateProdFlow(id, { status:'confirmed', confirmedBy:currentUser.username, confirmedByName:currentUser.name, confirmedAt:new Date().toISOString() });
   if (!x) return;
   const rawStock = getData('rawStock');
   const existing = rawStock.find(r => r.name === x.item);
   if (existing) { existing.qty += x.qty; existing.unit = x.unit; } else rawStock.push({ id:uid(), name:x.item, qty:x.qty, unit:x.unit });
   saveData('rawStock', rawStock);
-  renderStore(); renderProcurement();
+  renderStore(); 
+  renderProcurement();
+  renderDashboard();
+  buildSidebar();
   toast(lang==='am'?`✅ ${x.qty} ${x.unit||''} ${x.item} ተረጋግጦ ገባ`:`✅ Confirmed — ${x.qty} ${x.unit||''} ${x.item} received`);
 }
 
@@ -5013,6 +5016,10 @@ function saveStoreToCutting(itemName, unit) {
 
   document.getElementById('storeToCuttingModal').remove();
   renderStore();
+  renderCutting();
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+  renderDashboard();
+  buildSidebar();
   toast(`📤 ${qty} ${unit} ${itemName} → ${lang==='am'?'ቆረጣ ክፍል ተልኳል':'sent to Cutting'} ✓`);
 }
 
@@ -7033,6 +7040,7 @@ function saveCutToSewing(cutId) {
   renderCutting();
   renderSewing();
   if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+  renderDashboard();
   buildSidebar();
   toast(`📤 ${qty} ${r.type} → ${lang==='am'?'ስፌት ክፍል ተልኳል':'sent to Sewing'} ✓`);
 }
@@ -7384,6 +7392,7 @@ function saveSewToStore() {
   renderSewing();
   renderStore();
   if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+  renderDashboard();
   buildSidebar();
   toast(`📤 ${qty} ${type} → ${lang==='am'?'እቃ ቤት ተልኳል':'sent to Store'} ✓`);
 }
