@@ -810,28 +810,33 @@ function getNavBadgeCount(id, role) {
 
   } else if (id === 'store' && role === 'owner') {
     // store→branch transfers awaiting owner approval + incoming shipments awaiting store confirmation
+    const isActPF = x => x && (x.status === 'in_transit' || x.status === 'pending' || x.status === 'partial' || x.status === 'approved' || x.status === 'pending_owner');
     const pendingBranchTr = getData('storeTransfers').filter(t => t.status === 'pending_owner').length;
-    const incomingProc = getData('prodFlow').filter(x => x.stage==='proc_store' && (x.status==='pending'||x.status==='approved')).length;
-    const incomingSew  = getData('prodFlow').filter(x => x.stage==='sewing_store' && (x.status==='pending'||x.status==='approved')).length;
+    const incomingProc = getData('prodFlow').filter(x => x.stage==='proc_store' && isActPF(x)).length;
+    const incomingSew  = getData('prodFlow').filter(x => x.stage==='sewing_store' && isActPF(x)).length;
     badgeCount = pendingBranchTr + incomingProc + incomingSew;
     badgeColor = '#FFA726';
   } else if (id === 'store' && role === 'store') {
     // incoming shipments (from Procurement + Sewing) awaiting this store staff's confirmation
-    badgeCount = getData('prodFlow').filter(x => (x.stage==='proc_store'||x.stage==='sewing_store') && (x.status==='pending'||x.status==='approved')).length;
+    const isActPF = x => x && (x.status === 'in_transit' || x.status === 'pending' || x.status === 'partial' || x.status === 'approved' || x.status === 'pending_owner');
+    badgeCount = getData('prodFlow').filter(x => (x.stage==='proc_store'||x.stage==='sewing_store') && isActPF(x)).length;
     badgeColor = '#4FC3F7';
   } else if (id === 'cutting' && (role === 'cutting' || role === 'owner')) {
     // incoming raw material from Store awaiting confirmation
-    badgeCount = getData('prodFlow').filter(x => x.stage==='store_cutting' && (x.status==='pending'||x.status==='approved')).length;
+    const isActPF = x => x && (x.status === 'in_transit' || x.status === 'pending' || x.status === 'partial' || x.status === 'approved');
+    badgeCount = getData('prodFlow').filter(x => x.stage==='store_cutting' && isActPF(x)).length;
     badgeColor = '#4FC3F7';
   } else if (id === 'sewing' && (role === 'sewing' || role === 'owner')) {
     // incoming cut pieces from Cutting awaiting confirmation
-    badgeCount = getData('prodFlow').filter(x => x.stage==='cutting_sewing' && (x.status==='pending'||x.status==='approved')).length;
+    const isActPF = x => x && (x.status === 'in_transit' || x.status === 'pending' || x.status === 'partial' || x.status === 'approved' || x.status === 'pending_owner');
+    badgeCount = getData('prodFlow').filter(x => x.stage==='cutting_sewing' && isActPF(x)).length;
     badgeColor = '#4FC3F7';
   } else if (id === 'dashboard' && role === 'owner') {
     // combine pending store transfers + pending wholesale + pending production transfers
+    const isActPF = x => x && (x.status === 'in_transit' || x.status === 'pending' || x.status === 'partial' || x.status === 'pending_owner');
     const wsPending = getData('wholesale').filter(w => w.status === 'pending').length;
     const strPending = getData('storeTransfers').filter(t => t.status === 'pending_owner').length;
-    const prodFlowPending = getData('prodFlow').filter(x => x.status === 'pending_owner').length;
+    const prodFlowPending = getData('prodFlow').filter(isActPF).length;
     const editPending = getData('pendingEdits').filter(e => e.status === 'pending').length;
     badgeCount = getData('pendingTransfers').filter(p => p.status === 'pending').length + wsPending + strPending + prodFlowPending + editPending;
     badgeColor = '#FFA726';
@@ -967,6 +972,9 @@ function switchProductionTab(sub) {
       btn.style.fontWeight = isActive ? '700' : '600';
     });
   }
+  // Render live pipeline flow overview
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+
   // Render the relevant data for that sub-tab
   if (sub === 'cutting') renderCutting();
   else if (sub === 'sewing') renderSewing();
@@ -1874,26 +1882,196 @@ function canActCutting()     { return !!currentUser && (currentUser.role === 'ow
 
 // Reusable "incoming — awaiting confirmation" list block used on Store/Cutting/Sewing pages
 function prodFlowPendingHTML(stage, canConfirm, confirmFnName, itemLabelFn) {
-  const items = getProdFlow(stage).filter(x => x.status === 'pending' || x.status === 'approved' || x.status === 'pending_owner');
+  const isIncomingActive = x => x && (x.status === 'in_transit' || x.status === 'pending' || x.status === 'partial' || x.status === 'approved' || x.status === 'pending_owner');
+  const items = getProdFlow(stage).filter(isIncomingActive);
   if (!items.length) return '';
   return `<div style="background:rgba(79,195,247,0.06);border:1px solid rgba(79,195,247,0.25);border-radius:10px;padding:10px 12px;margin-bottom:12px">
     <div style="font-size:11px;font-weight:700;color:#4FC3F7;letter-spacing:0.5px;margin-bottom:8px">📥 ${lang==='am'?'የደረሱ — ማረጋገጫ ይጠብቃሉ':'INCOMING — AWAITING CONFIRMATION'} (${items.length})</div>
     ${items.map(x => {
-      const isPendingOwner = x.status === 'pending_owner';
-      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid rgba(255,255,255,0.06)">
-        <div style="font-size:12px;color:var(--white);font-weight:600">${itemLabelFn(x)}
-          <div style="font-size:10px;color:var(--white-dim);font-weight:400;margin-top:2px">${x.date} · ${lang==='am'?'ላከ':'from'}: ${x.sentByName||x.sentBy||'—'}</div>
+      const isPartial = x.status === 'partial';
+      const sent = x.sentQty || x.qty || 0;
+      const rec = x.receivedQty || 0;
+      const rem = Math.max(0, sent - rec - (x.returnedQty || 0) - (x.damagedQty || 0));
+
+      const partialBadge = isPartial 
+        ? `<span style="font-size:10px;font-weight:700;color:#FFA726;background:rgba(255,167,38,0.12);padding:2px 6px;border-radius:4px;border:1px solid rgba(255,167,38,0.3);margin-left:6px">⚠️ ${lang==='am'?'በከፊል የገባ':'Partial'} (${rec}/${sent})</span>`
+        : '';
+
+      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,0.06);flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--white);font-weight:600">
+          ${itemLabelFn(x)} ${partialBadge}
+          <div style="font-size:10px;color:var(--white-dim);font-weight:400;margin-top:2px">
+            ${x.date} · ${lang==='am'?'ላከ':'from'}: ${x.sentByName||x.sentBy||'—'} ${rem < sent ? `· <span style="color:#4FC3F7">${lang==='am'?'ቀሪ የሚጠበቅ':'Remaining'}: ${rem}</span>` : ''}
+          </div>
         </div>
-        ${isPendingOwner
-          ? `<span style="flex-shrink:0;font-size:10px;font-weight:700;color:#FFA726;padding:4px 8px;background:rgba(255,167,38,0.12);border:1px solid rgba(255,167,38,0.3);border-radius:6px">⏳ ${lang==='am'?'የኦነር ፈቃድ ይጠበቃል':'Awaiting Owner Approval'}</span>`
-          : (canConfirm
-            ? `<button onclick="${confirmFnName}('${x.id}')" style="flex-shrink:0;padding:6px 12px;font-size:11px;font-weight:700;font-family:inherit;border-radius:8px;border:1px solid rgba(76,175,80,0.5);background:rgba(76,175,80,0.12);color:#80e080;cursor:pointer">✅ ${lang==='am'?'ተቀበልኩ':'Confirm'}</button>`
-            : `<span style="flex-shrink:0;font-size:10px;font-weight:700;color:#FFA726">⏳ ${lang==='am'?'ይጠበቃል':'Pending'}</span>`
-          )
-        }
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+          ${canConfirm
+            ? `<button onclick="${confirmFnName}('${x.id}')" style="padding:6px 12px;font-size:11px;font-weight:700;font-family:inherit;border-radius:8px;border:1px solid rgba(76,175,80,0.5);background:rgba(76,175,80,0.12);color:#80e080;cursor:pointer">📥 ${lang==='am'?'ተቀበል':'Receive'}</button>
+               <button onclick="returnProdFlowTransfer('${x.id}')" style="padding:6px 10px;font-size:11px;font-weight:700;font-family:inherit;border-radius:8px;border:1px solid rgba(224,90,90,0.4);background:rgba(224,90,90,0.1);color:#FF9090;cursor:pointer">↩️ ${lang==='am'?'መልስ':'Return'}</button>`
+            : `<span style="font-size:10px;font-weight:700;color:#FFA726">⏳ ${lang==='am'?'በመንገድ ላይ':'In Transit'}</span>`
+          }
+        </div>
       </div>`;
     }).join('')}
   </div>`;
+}
+
+// ── PRODUCTION PIPELINE OVERVIEW (ቆረጣ ➔ ስፌት ➔ ዕቃ ቤት) ──
+function renderProdPipelineOverview() {
+  const el = document.getElementById('prodPipelineOverview');
+  if (!el) return;
+
+  // 1. Cutting Stats
+  const cuttingRaw = getData('cuttingRaw');
+  const cutting = getData('cutting');
+  let cutAvailTotal = 0;
+  cutting.forEach(c => {
+    const rem = Math.max(0, (c.qty || 0) - (c.sentQty || 0));
+    if (rem > 0) cutAvailTotal += rem;
+  });
+
+  // 2. In Transit: Cutting ➔ Sewing
+  const cutToSew = getProdFlow('cutting_sewing').filter(x => 
+    x.status === 'in_transit' || x.status === 'pending' || x.status === 'partial' || x.status === 'pending_owner'
+  );
+  let cutToSewTransitQty = 0;
+  let cutToSewPartialCount = 0;
+  cutToSew.forEach(x => {
+    const sent = x.sentQty || x.qty || 0;
+    const rec = x.receivedQty || 0;
+    const rem = Math.max(0, sent - rec - (x.returnedQty || 0) - (x.damagedQty || 0));
+    cutToSewTransitQty += rem;
+    if (x.status === 'partial') cutToSewPartialCount++;
+  });
+
+  // 3. Sewing Stats
+  const sewingCutStock = getData('sewingCutStock');
+  const sewingCutTotal = sewingCutStock.reduce((s, p) => s + (p.qty || 0), 0);
+  const sewingReadyList = computeSewingReadyToSend();
+  const sewingReadyTotal = sewingReadyList.reduce((s, r) => s + (r.qty || 0), 0);
+
+  // 4. In Transit: Sewing ➔ Store
+  const sewToStore = getProdFlow('sewing_store').filter(x => 
+    x.status === 'in_transit' || x.status === 'pending' || x.status === 'partial' || x.status === 'pending_owner'
+  );
+  let sewToStoreTransitQty = 0;
+  let sewToStorePartialCount = 0;
+  sewToStore.forEach(x => {
+    const sent = x.sentQty || x.qty || 0;
+    const rec = x.receivedQty || 0;
+    const rem = Math.max(0, sent - rec - (x.returnedQty || 0) - (x.damagedQty || 0));
+    sewToStoreTransitQty += rem;
+    if (x.status === 'partial') sewToStorePartialCount++;
+  });
+
+  // 5. Store Finished Goods Stats
+  const store = getData('store');
+  const storeTotal = store.reduce((s, x) => s + (x.qty || 0), 0);
+
+  const totalInTransit = cutToSewTransitQty + sewToStoreTransitQty;
+  const transitBadge = totalInTransit > 0 
+    ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#FFA726;background:rgba(255,167,38,0.14);border:1px solid rgba(255,167,38,0.35);padding:3px 10px;border-radius:20px;animation:pulse-border 2s infinite">
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#FFA726"></span>
+        🚚 ${totalInTransit} ${lang==='am'?'በመንገድ ላይ ያለ እቃ':'In Transit'}
+      </span>`
+    : `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#80e080;background:rgba(76,175,80,0.12);border:1px solid rgba(76,175,80,0.25);padding:3px 10px;border-radius:20px">
+        ✓ ${lang==='am'?'ሁሉም እቃዎች ደርሰዋል':'All Synced'}
+      </span>`;
+
+  el.innerHTML = `
+    <div style="background:linear-gradient(135deg, rgba(22,29,63,0.85) 0%, rgba(12,17,45,0.95) 100%);border:1px solid rgba(201,168,76,0.25);border-radius:14px;padding:14px 18px;box-shadow:0 8px 24px rgba(0,0,0,0.35);margin-bottom:6px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:18px">🏭</span>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--white);letter-spacing:0.3px">
+              ${lang==='am'?'የምርት ፍሰት ሂደት (ቆረጣ ➔ ስፌት ➔ ዕቃ ቤት)':'Production Pipeline Flow (Cutting ➔ Sewing ➔ Store)'}
+            </div>
+            <div style="font-size:10.5px;color:var(--white-dim);margin-top:1px">
+              ${lang==='am'?'የእያንዳንዱ ክፍል ክምችት እና በመንገድ ላይ ያሉ ዝውውሮች ቀጥታ ቁጥጥር':'Live tracking of active inventory and transfers in motion'}
+            </div>
+          </div>
+        </div>
+        <div>${transitBadge}</div>
+      </div>
+
+      <!-- Pipeline Grid -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(170px, 1fr));gap:10px;align-items:stretch">
+        
+        <!-- Step 1: Cutting Ready -->
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:700;color:#C5CBD8">✂️ ${lang==='am'?'ቆረጣ (ዝግጁ)':'Cutting (Ready)'}</span>
+            <span style="font-size:9.5px;color:rgba(197,203,216,0.5)">ክምችት</span>
+          </div>
+          <div style="font-size:20px;font-weight:800;color:var(--gold);line-height:1.2;margin-bottom:4px">
+            ${cutAvailTotal} <span style="font-size:11px;font-weight:500;color:var(--white-dim)">${lang==='am'?'ቁራጭ':'pcs'}</span>
+          </div>
+          <div style="font-size:10px;color:var(--white-dim)">
+            ${lang==='am'?'ወደ ስፌት ለመላክ ዝግጁ':'Ready for sewing'}
+          </div>
+        </div>
+
+        <!-- Bridge 1: Cutting to Sewing In Transit -->
+        <div style="background:${cutToSewTransitQty>0?'rgba(255,167,38,0.08)':'rgba(255,255,255,0.02)'};border:1px solid ${cutToSewTransitQty>0?'rgba(255,167,38,0.35)':'rgba(255,255,255,0.06)'};border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between;position:relative">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:700;color:${cutToSewTransitQty>0?'#FFA726':'#C5CBD8'}">🚚 ${lang==='am'?'ቆረጣ ➔ ስፌት':'Cut ➔ Sew'}</span>
+            ${cutToSewPartialCount>0 ? `<span style="font-size:9px;font-weight:700;color:#FFA726;background:rgba(255,167,38,0.18);padding:1px 5px;border-radius:4px">⚠️ በከፊል (${cutToSewPartialCount})</span>` : ''}
+          </div>
+          <div style="font-size:20px;font-weight:800;color:${cutToSewTransitQty>0?'#FFA726':'#80e080'};line-height:1.2;margin-bottom:4px">
+            ${cutToSewTransitQty} <span style="font-size:11px;font-weight:500;color:var(--white-dim)">${lang==='am'?'በመንገድ ላይ':'in transit'}</span>
+          </div>
+          <div style="font-size:10px;color:var(--white-dim)">
+            ${cutToSew.length ? `${cutToSew.length} ${lang==='am'?'ንቁ ዝውውሮች':'active transfer(s)'}` : (lang==='am'?'ምንም ዝውውር የለም':'No active transfers')}
+          </div>
+        </div>
+
+        <!-- Step 2: Sewing Floor -->
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:700;color:#C5CBD8">🪡 ${lang==='am'?'ስፌት ክፍል':'Sewing Floor'}</span>
+            <span style="font-size:9.5px;color:rgba(197,203,216,0.5)">ሂደት</span>
+          </div>
+          <div style="font-size:16px;font-weight:800;color:var(--white);line-height:1.2;margin-bottom:4px">
+            <span style="color:#4FC3F7">${sewingCutTotal}</span> <span style="font-size:10px;font-weight:500;color:var(--white-dim)">${lang==='am'?'ጥሬ እቃ':'cut pool'}</span>
+            <span style="color:rgba(255,255,255,0.3);margin:0 4px">|</span>
+            <span style="color:var(--gold)">${sewingReadyTotal}</span> <span style="font-size:10px;font-weight:500;color:var(--white-dim)">${lang==='am'?'ያለቀለት':'ready'}</span>
+          </div>
+          <div style="font-size:10px;color:var(--white-dim)">
+            ${lang==='am'?'የተጠናቀቀ ወደ እቃ ቤት የሚላክ':'Finished goods ready to store'}
+          </div>
+        </div>
+
+        <!-- Bridge 2: Sewing to Store In Transit -->
+        <div style="background:${sewToStoreTransitQty>0?'rgba(255,167,38,0.08)':'rgba(255,255,255,0.02)'};border:1px solid ${sewToStoreTransitQty>0?'rgba(255,167,38,0.35)':'rgba(255,255,255,0.06)'};border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between;position:relative">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:700;color:${sewToStoreTransitQty>0?'#FFA726':'#C5CBD8'}">🚚 ${lang==='am'?'ስፌት ➔ ዕቃ ቤት':'Sew ➔ Store'}</span>
+            ${sewToStorePartialCount>0 ? `<span style="font-size:9px;font-weight:700;color:#FFA726;background:rgba(255,167,38,0.18);padding:1px 5px;border-radius:4px">⚠️ በከፊል (${sewToStorePartialCount})</span>` : ''}
+          </div>
+          <div style="font-size:20px;font-weight:800;color:${sewToStoreTransitQty>0?'#FFA726':'#80e080'};line-height:1.2;margin-bottom:4px">
+            ${sewToStoreTransitQty} <span style="font-size:11px;font-weight:500;color:var(--white-dim)">${lang==='am'?'በመንገድ ላይ':'in transit'}</span>
+          </div>
+          <div style="font-size:10px;color:var(--white-dim)">
+            ${sewToStore.length ? `${sewToStore.length} ${lang==='am'?'ንቁ ዝውውሮች':'active transfer(s)'}` : (lang==='am'?'ምንም ዝውውር የለም':'No active transfers')}
+          </div>
+        </div>
+
+        <!-- Step 3: Store Finished Stock -->
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:700;color:#C5CBD8">📦 ${lang==='am'?'ዕቃ ቤት (ክምችት)':'Store Stock'}</span>
+            <span style="font-size:9.5px;color:rgba(197,203,216,0.5)">መደርደሪያ</span>
+          </div>
+          <div style="font-size:20px;font-weight:800;color:#80e080;line-height:1.2;margin-bottom:4px">
+            ${storeTotal} <span style="font-size:11px;font-weight:500;color:var(--white-dim)">${lang==='am'?'ቁራጭ':'pcs'}</span>
+          </div>
+          <div style="font-size:10px;color:var(--white-dim)">
+            ${lang==='am'?'ለሱቆች ዝውውር ዝግጁ ክምችት':'Ready for retail dispatches'}
+          </div>
+        </div>
+
+      </div>
+    </div>`;
 }
 
 // ── DASHBOARD ──────────────────────────────────────────────────
@@ -1933,7 +2111,7 @@ function renderDashboard() {
     const pendingTr   = getData('pendingTransfers').filter(p => p.status === 'pending');
     const pendingProc = getData('procurementOrders').filter(p => p.status === 'pending');
     const pendingLoan = getData('branchLoans').filter(l => l.status === 'pending_owner');
-    const pendingProdFlow = getData('prodFlow').filter(x => x.status === 'pending_owner');
+    const pendingProdFlow = getData('prodFlow').filter(x => x.status === 'in_transit' || x.status === 'pending' || x.status === 'partial' || x.status === 'pending_owner');
     const pendingEdits    = getData('pendingEdits').filter(e => e.status === 'pending');
     const total = pendingWS.length + pendingStr.length + pendingTr.length + pendingProc.length + pendingLoan.length + pendingProdFlow.length + pendingEdits.length;
 
@@ -1969,8 +2147,12 @@ function renderDashboard() {
       if (pendingProdFlow.length) sections.push(`
         <div style="font-size:10px;font-weight:700;color:#C9A84C;letter-spacing:0.5px;margin:8px 0 4px">🚚 ${lang==='am'?'የምርት ዝውውር (ቆረጣ/ስፌት/እቃ ቤት)':'PRODUCTION TRANSFERS'} (${pendingProdFlow.length})</div>
         ${pendingProdFlow.map(p => {
-          const stageLabel = p.stage === 'cutting_sewing' ? (lang==='am'?'ቆረጣ → ስፌት':'Cutting → Sewing') : (lang==='am'?'ስፌት → እቃ ቤት':'Sewing → Store');
-          return row('🚚', `${stageLabel} · ${p.type} ×${p.qty}`, `${p.date} · ${p.sentByName||p.sentBy||'—'}`, '', `approveProdFlowTransfer('${p.id}')`, `rejectProdFlowTransfer('${p.id}')`);
+          const stageLabel = p.stage === 'cutting_sewing' ? (lang==='am'?'ቆረጣ → ስፌት':'Cutting → Sewing') : (p.stage === 'store_cutting' ? (lang==='am'?'ዕቃ ቤት → ቆረጣ':'Store → Cutting') : (lang==='am'?'ስፌት → እቃ ቤት':'Sewing → Store'));
+          const sent = p.sentQty || p.qty || 0;
+          const rec = p.receivedQty || 0;
+          const rem = Math.max(0, sent - rec - (p.returnedQty || 0) - (p.damagedQty || 0));
+          const qtyText = rec > 0 ? `${p.type||p.item} (የገባ: ${rec}, ቀሪ: ${rem})` : `${p.type||p.item} ×${sent}`;
+          return row('🚚', `${stageLabel} · ${qtyText}`, `${p.date} · ${p.sentByName||p.sentBy||'—'}`, '', `approveProdFlowTransfer('${p.id}')`, `rejectProdFlowTransfer('${p.id}')`);
         }).join('')}`);
 
       if (pendingEdits.length) sections.push(`
@@ -2437,6 +2619,10 @@ function renderCutting() {
       </tr>`).join('')
     : noDataRow(5);
 
+  // ── 5b. Outgoing transfers to Sewing ──
+  renderCutToSewTable();
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+
   // ── 6. Tab styling + cross-reference report (Type × Fabric: cut vs sewn) ──
   updateCuttingTabStyle();
   renderCuttingReportTab();
@@ -2762,7 +2948,7 @@ function renderStore() {
   const sewInEl = document.getElementById('storeSewIncoming');
   if (sewInEl) {
     sewInEl.innerHTML = prodFlowPendingHTML('sewing_store', canActStore(), 'openReceiveShelfModal',
-      x => `🪡 ${x.qty} ${x.type}`);
+      x => `🪡 ${Math.max(0, (x.sentQty||x.qty) - (x.receivedQty||0))} ${x.type}`);
   }
 
   // Stock summary cards
@@ -2876,6 +3062,7 @@ function renderStore() {
   if (dispDate && !dispDate.value) dispDate.value = new Date().toISOString().slice(0,10);
   populateBranchSelect('dispatchBranch');
   updateDispatchAvail();
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
 }
 
 function openDispatchModal() {
@@ -4831,14 +5018,18 @@ function saveStoreToCutting(itemName, unit) {
 
 // Cutting confirms raw material physically arrived — this credits cuttingRaw (used by the fabric select)
 function confirmStoreToCutting(id) {
-  if (!canActCutting()) { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ቆረጣ ክፍል ብቻ ነው':'⛔ Only Cutting staff can confirm this','error'); return; }
+  if (!canActCutting() && currentUser.role !== 'owner') { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ቆረጣ ክፍል ወይም ኦነር ብቻ ነው':'⛔ Only Cutting staff or Owner can confirm this','error'); return; }
   const x = updateProdFlow(id, { status:'confirmed', confirmedBy:currentUser.username, confirmedByName:currentUser.name, confirmedAt:new Date().toISOString() });
   if (!x) return;
   const cd = getData('cuttingRaw');
   const ex = cd.find(r => r.name === x.item);
   if (ex) { ex.qty += x.qty; ex.unit = x.unit; } else cd.push({ id:uid(), name:x.item, qty:x.qty, unit:x.unit });
   saveData('cuttingRaw', cd);
-  renderCutting(); renderStore();
+  renderCutting();
+  renderStore();
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+  renderDashboard();
+  buildSidebar();
   toast(lang==='am'?`✅ ${x.qty} ${x.unit||''} ${x.item} ተረጋግጦ ገባ`:`✅ Confirmed — ${x.qty} ${x.unit||''} ${x.item} received`);
 }
 
@@ -6811,7 +7002,7 @@ function submitCutToSewingModal() {
 }
 
 function saveCutToSewing(cutId) {
-  const qty = parseInt(document.getElementById('ctsQty').value);
+  const qty = parseInt(document.getElementById('ctsQty')?.value);
   const data = getData('cutting');
   const r = data.find(x => x.id === cutId);
   if (!r) return;
@@ -6822,43 +7013,295 @@ function saveCutToSewing(cutId) {
   saveData('cutting', data);
 
   const today = new Date().toISOString().slice(0,10);
-  pushProdFlow({ id:uid(), stage:'cutting_sewing', date:today, type:r.type, qty, status:'pending_owner', sentBy:currentUser.username, sentByName:currentUser.name, cutId:r.id });
+  pushProdFlow({
+    id: uid(),
+    stage: 'cutting_sewing',
+    date: today,
+    type: r.type,
+    qty,
+    sentQty: qty,
+    receivedQty: 0,
+    returnedQty: 0,
+    damagedQty: 0,
+    status: 'in_transit',
+    sentBy: currentUser.username,
+    sentByName: currentUser.name || currentUser.username,
+    cutId: r.id
+  });
 
-  document.getElementById('cutToSewModal').remove();
+  document.getElementById('cutToSewModal')?.remove();
   renderCutting();
-  toast(`📤 ${qty} ${r.type} → ${lang==='am'?'ስፌት ክፍል ተልኳል (ኦነሩ እንዲያፀድቀው ተልኳል)':'sent to Sewing (awaiting owner approval)'} ✓`);
+  renderSewing();
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+  buildSidebar();
+  toast(`📤 ${qty} ${r.type} → ${lang==='am'?'ስፌት ክፍል ተልኳል':'sent to Sewing'} ✓`);
 }
 
-// Sewing confirms cut pieces physically arrived — credits the "ready to sew" pool
-function confirmCutToSewing(id) {
-  if (!isSewDeptManager() && currentUser.role !== 'owner') { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ስፌት ክፍል ወይም ኦነር ብቻ ነው':'⛔ Only Sewing staff or Owner can confirm this','error'); return; }
-  const item = getData('prodFlow').find(p => p.id === id);
-  if (item && item.status === 'pending_owner') {
-    toast(lang==='am'?'⛔ አሁንም በኦነር አልፀደቀም — ኦነሩ ካፀደቀው በኋላ ነው የሚረጋገጠው':'⛔ Awaiting owner approval first', 'error');
+// Sewing confirms cut pieces physically arrived with full or partial receipt option
+function openReceiveCutModal(id) {
+  if (!isSewDeptManager() && currentUser.role !== 'owner') { 
+    toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ስፌት ክፍል ወይም ኦነር ብቻ ነው':'⛔ Only Sewing staff or Owner can confirm this','error'); 
+    return; 
+  }
+  const x = getData('prodFlow').find(p => p.id === id);
+  if (!x) return;
+  const totalSent = x.sentQty || x.qty || 0;
+  const alreadyRec = x.receivedQty || 0;
+  const remQty = Math.max(0, totalSent - alreadyRec - (x.returnedQty || 0) - (x.damagedQty || 0));
+
+  const modal = document.createElement('div');
+  modal.id = 'receiveCutModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:#1a1f2e;border-radius:14px;padding:22px;width:100%;max-width:440px;border:1px solid rgba(255,255,255,0.12);box-shadow:0 12px 32px rgba(0,0,0,0.5)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h3 style="color:var(--gold);font-size:15.5px;margin:0">📥 ${lang==='am'?'ከቆረጣ የተላከ ተቀበል':'Receive from Cutting'}</h3>
+        <button onclick="document.getElementById('receiveCutModal').remove()" style="background:rgba(255,255,255,0.06);border:none;color:var(--white-dim);width:28px;height:28px;border-radius:8px;cursor:pointer">✕</button>
+      </div>
+
+      <div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.22);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12.5px;color:var(--white)">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span>📦 <b>${x.type}</b></span>
+          <span style="color:var(--gold);font-weight:700">${x.date}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;color:rgba(197,203,216,0.7);font-size:11.5px">
+          <span>📤 ${lang==='am'?'የተላከ ብዛት':'Total Sent'}: <b>${totalSent}</b></span>
+          <span>⏳ ${lang==='am'?'ቀሪ የሚጠበቅ':'Remaining'}: <b style="color:#4FC3F7">${remQty}</b></span>
+        </div>
+        ${alreadyRec > 0 ? `<div style="font-size:11px;color:#80e080;margin-top:4px">✅ ቀደም ሲል የገባ: ${alreadyRec}</div>` : ''}
+        <div style="font-size:11px;color:rgba(197,203,216,0.5);margin-top:4px">👤 ${lang==='am'?'ላኪ':'Sender'}: ${x.sentByName||x.sentBy||'—'}</div>
+      </div>
+
+      <div style="margin-bottom:14px">
+        <label style="font-size:11.5px;color:rgba(197,203,216,0.7);font-weight:700;display:block;margin-bottom:6px">
+          ${lang==='am'?'ተረክበው የሚያስገቡት ብዛት (አሁን የደረሰው) *':'Received Quantity Now *'}
+        </label>
+        <input id="rcvCutQty" type="number" min="1" max="${remQty}" value="${remQty}" oninput="checkRcvCutDiff(${remQty})"
+          style="width:100%;padding:10px 12px;background:#0f1420;border:1px solid rgba(201,168,76,0.4);border-radius:9px;color:var(--white);font-family:inherit;font-size:15px;font-weight:700;outline:none;box-sizing:border-box" />
+      </div>
+
+      <div id="rcvCutDiffBox" style="display:none;background:rgba(255,167,38,0.08);border:1px solid rgba(255,167,38,0.3);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px">
+        <div style="color:#FFA726;font-weight:700;margin-bottom:8px">
+          ⚠️ <span id="rcvCutDiffText"></span>
+        </div>
+        <div style="font-size:11px;color:rgba(197,203,216,0.7);margin-bottom:6px">${lang==='am'?'ለቀሪው ልዩነት ምን ይደረግ?':'What to do with the remaining difference?'}</div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;color:var(--white);font-size:12px">
+          <input type="radio" name="rcvCutAction" value="rem_transit" checked />
+          <span>🚚 ${lang==='am'?'ቀሪው በመንገድ ላይ ይቆይ (በቀጣይ ዙር ሲደርስ ይረከባል)':'Keep remaining In Transit (arrive in next batch)'}</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;color:var(--white);font-size:12px">
+          <input type="radio" name="rcvCutAction" value="rem_return" />
+          <span>↩️ ${lang==='am'?'ቀሪው ወደ ቆረጣ ክፍል ይመለስ (የቆረጣ ስቶክ ይመለሳል)':'Return remaining to Cutting (restore cut stock)'}</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--white);font-size:12px">
+          <input type="radio" name="rcvCutAction" value="rem_damage" />
+          <span>⚠️ ${lang==='am'?'እንደ ብልሽት/የጠፋ (ዳሜጅ) ይመዝገብ':'Record as Damage/Defect'}</span>
+        </label>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="submitReceiveCut('${id}', ${remQty})" style="flex:1;min-width:120px;padding:11px;background:linear-gradient(135deg,var(--gold),#A87820);color:var(--navy);border:none;border-radius:9px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer">
+          ✅ ${lang==='am'?'ተቀበልኩ':'Confirm Receipt'}
+        </button>
+        <button onclick="returnProdFlowTransfer('${id}')" style="padding:11px 14px;background:rgba(224,90,90,0.12);border:1px solid rgba(224,90,90,0.4);color:#FF9090;border-radius:9px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer">
+          ↩️ ${lang==='am'?'መልስ':'Return'}
+        </button>
+        <button onclick="document.getElementById('receiveCutModal').remove()" style="padding:11px 14px;background:transparent;border:1px solid rgba(255,255,255,0.15);color:var(--white-dim);border-radius:9px;font-family:inherit;cursor:pointer">
+          ${lang==='am'?'ሰርዝ':'Cancel'}
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function checkRcvCutDiff(remQty) {
+  const val = parseInt(document.getElementById('rcvCutQty')?.value) || 0;
+  const box = document.getElementById('rcvCutDiffBox');
+  const txt = document.getElementById('rcvCutDiffText');
+  if (!box || !txt) return;
+  if (val > 0 && val < remQty) {
+    box.style.display = 'block';
+    const diff = remQty - val;
+    txt.textContent = lang==='am' ? `ያልተረከቡት ${diff} ቁራጭ ልዩነት አለ` : `Discrepancy: ${diff} pieces not received`;
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+function submitReceiveCut(id, remQtyParam) {
+  const all = getData('prodFlow');
+  const x = all.find(p => p.id === id);
+  if (!x) return;
+
+  const totalSent = x.sentQty || x.qty || 0;
+  const alreadyRec = x.receivedQty || 0;
+  const remQty = remQtyParam || Math.max(0, totalSent - alreadyRec - (x.returnedQty || 0) - (x.damagedQty || 0));
+
+  const rcvQty = parseInt(document.getElementById('rcvCutQty')?.value);
+  if (!rcvQty || rcvQty <= 0 || rcvQty > remQty) {
+    toast(lang==='am'?'ልክ ያልሆነ ብዛት':'Invalid quantity', 'error');
     return;
   }
-  const x = updateProdFlow(id, { status:'confirmed', confirmedBy:currentUser.username, confirmedByName:currentUser.name, confirmedAt:new Date().toISOString() });
-  if (!x) return;
+
+  const action = document.querySelector('input[name="rcvCutAction"]:checked')?.value || 'rem_transit';
+  const diff = remQty - rcvQty;
+
+  // 1. Credit sewingCutStock by exactly rcvQty
   const pool = getData('sewingCutStock');
   const ex = pool.find(p => p.type === x.type);
-  if (ex) ex.qty += x.qty; else pool.push({ id:uid(), type:x.type, qty:x.qty });
+  if (ex) ex.qty += rcvQty; else pool.push({ id:uid(), type:x.type, qty:rcvQty });
   saveData('sewingCutStock', pool);
-  renderSewing(); renderCutting(); buildSidebar();
-  toast(lang==='am'?`✅ ${x.qty} ${x.type} ተረጋግጦ ገባ`:`✅ Confirmed — ${x.qty} ${x.type} received`);
+
+  // 2. Update prodFlow record
+  x.receivedQty = (x.receivedQty || 0) + rcvQty;
+  x.confirmedBy = currentUser.username;
+  x.confirmedByName = currentUser.name || currentUser.username;
+  x.confirmedAt = new Date().toISOString();
+
+  if (diff > 0) {
+    if (action === 'rem_return') {
+      x.returnedQty = (x.returnedQty || 0) + diff;
+      x.status = 'confirmed';
+      // Restore cutting sentQty
+      if (x.cutId) {
+        const cutting = getData('cutting');
+        const cutRec = cutting.find(c => c.id === x.cutId);
+        if (cutRec) {
+          cutRec.sentQty = Math.max(0, (cutRec.sentQty || 0) - diff);
+          saveData('cutting', cutting);
+        }
+      }
+    } else if (action === 'rem_damage') {
+      x.damagedQty = (x.damagedQty || 0) + diff;
+      x.status = 'confirmed';
+      // Record damage in sewing
+      const sewData = getData('sewing');
+      sewData.push({ id:uid(), date: new Date().toISOString().slice(0,10), worker:'—', dept:getFirstSewDeptKey(), type:x.type, qty:0, dmgQty:diff, note:`ከቆረጣ በደረሰ ጊዜ የተመዘገበ ዳሜጅ (${x.type})` });
+      saveData('sewing', sewData);
+    } else {
+      // rem_transit
+      x.status = (x.receivedQty >= totalSent) ? 'confirmed' : 'partial';
+    }
+  } else {
+    x.status = 'confirmed';
+  }
+
+  saveData('prodFlow', all);
+  document.getElementById('receiveCutModal')?.remove();
+  renderSewing();
+  renderCutting();
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+  renderDashboard();
+  buildSidebar();
+  toast(lang==='am'?`✅ ${rcvQty} ${x.type} ተረጋግጦ ገባ${diff>0?` (ቀሪ: ${diff})`:''}`:`✅ Confirmed — ${rcvQty} ${x.type} received`);
+}
+
+// Backward-compatible alias for existing callers
+function confirmCutToSewing(id) {
+  openReceiveCutModal(id);
+}
+
+// Cancel cut-to-sewing transfer (if not yet received)
+function cancelCutToSewing(id) {
+  if (!confirm(lang==='am'?'ይህን ዝውውር መሰረዝ ይፈልጋሉ? የተቆረጠው ልብስ ወደ ቆረጣ ክፍል ይመለሳል።':'Cancel this transfer? Cut items will return to cutting.')) return;
+  const all = getData('prodFlow');
+  const x = all.find(p => p.id === id);
+  if (!x) return;
+  if (x.receivedQty && x.receivedQty > 0) {
+    toast(lang==='am'?'እቃው በከፊል ስለተረከበ መሰረዝ አይቻልም':'Cannot cancel — already partially received', 'error');
+    return;
+  }
+  x.status = 'cancelled';
+  x.cancelledBy = currentUser.username;
+  x.cancelledAt = new Date().toISOString();
+  
+  if (x.cutId) {
+    const cutting = getData('cutting');
+    const cutRecord = cutting.find(c => c.id === x.cutId);
+    if (cutRecord) {
+      cutRecord.sentQty = Math.max(0, (cutRecord.sentQty || 0) - (x.sentQty || x.qty || 0));
+      saveData('cutting', cutting);
+    }
+  }
+
+  saveData('prodFlow', all);
+  renderCutting();
+  renderSewing();
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+  renderDashboard();
+  buildSidebar();
+  toast(lang==='am'?'❌ ዝውውሩ ተሰርዟል — ስቶክ ወደ ቆረጣ ተመልሷል':'Transfer cancelled — items returned to cutting');
+}
+
+// Render Outgoing Transfers from Cutting to Sewing
+function renderCutToSewTable() {
+  const thead = document.getElementById('cutToSewThead');
+  const tbody = document.getElementById('cutToSewTbody');
+  if (!thead || !tbody) return;
+
+  const h = lang==='am' ? ['ቀን','አይነት','የተላከ','የገባ','ቀሪ','ሁኔታ','የተረከበው','እርምጃ'] : ['Date','Type','Sent','Received','Remaining','Status','Receiver','Actions'];
+  thead.innerHTML = `<tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>`;
+
+  const transfers = getProdFlow('cutting_sewing');
+  if (!transfers.length) {
+    tbody.innerHTML = noDataRow(h.length);
+    return;
+  }
+
+  const sorted = [...transfers].sort((a,b)=>b.date.localeCompare(a.date));
+  tbody.innerHTML = sorted.map(x => {
+    const sent = x.sentQty || x.qty || 0;
+    const rcv = x.receivedQty || 0;
+    const rem = Math.max(0, sent - rcv - (x.returnedQty || 0) - (x.damagedQty || 0));
+
+    let statusBadge = '';
+    if (x.status === 'in_transit' || x.status === 'pending' || x.status === 'pending_owner') {
+      statusBadge = `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;color:#FFA726;background:rgba(255,167,38,0.12);border:1px solid rgba(255,167,38,0.3)">🚚 ${lang==='am'?'በመንገድ ላይ':'In Transit'}</span>`;
+    } else if (x.status === 'partial') {
+      statusBadge = `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;color:#4FC3F7;background:rgba(79,195,247,0.12);border:1px solid rgba(79,195,247,0.3)">⚠️ ${lang==='am'?'በከፊል የገባ':'Partial'} (${rcv}/${sent})</span>`;
+    } else if (x.status === 'confirmed') {
+      statusBadge = `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;color:#80e080;background:rgba(76,175,80,0.12);border:1px solid rgba(76,175,80,0.3)">✅ ${lang==='am'?'ተረክቧል':'Received'}</span>`;
+    } else if (x.status === 'returned') {
+      statusBadge = `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;color:#FF9090;background:rgba(224,90,90,0.12);border:1px solid rgba(224,90,90,0.3)">↩️ ${lang==='am'?'የተመለሰ':'Returned'}</span>`;
+    } else if (x.status === 'cancelled') {
+      statusBadge = `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;color:var(--white-dim);background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12)">❌ ${lang==='am'?'የተሰረዘ':'Cancelled'}</span>`;
+    }
+
+    const canCancel = (canActCutting() || currentUser.role === 'owner') && rcv === 0 && (x.status === 'in_transit' || x.status === 'pending' || x.status === 'pending_owner');
+    const actCell = canCancel 
+      ? `<button onclick="cancelCutToSewing('${x.id}')" style="padding:3px 8px;font-size:10px;font-weight:700;font-family:inherit;border-radius:6px;border:1px solid rgba(224,90,90,0.4);background:rgba(224,90,90,0.1);color:#FF9090;cursor:pointer">❌ ${lang==='am'?'ሰርዝ':'Cancel'}</button>`
+      : '—';
+
+    return `<tr>
+      <td style="white-space:nowrap;color:var(--white-dim)">${x.date}</td>
+      <td style="font-weight:600;color:var(--white)">${x.type}</td>
+      <td style="text-align:center;font-weight:700;color:var(--gold)">${sent}</td>
+      <td style="text-align:center;color:#80e080;font-weight:600">${rcv}</td>
+      <td style="text-align:center;color:${rem>0?'#FFA726':'var(--white-dim)'};font-weight:700">${rem}</td>
+      <td>${statusBadge}</td>
+      <td style="color:var(--white-dim);font-size:11px">${x.confirmedByName||x.confirmedBy||'—'}</td>
+      <td style="text-align:center">${actCell}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ── SEWING → STORE (finished goods, tracked by type) ──
-// "Ready to send" = everything logged under whichever department is LAST in the configured
-// sequence (the final stage), minus what's already been sent.
 function computeSewingReadyToSend() {
   const lastDept = getLastSewDeptKey();
   const finished = getData('sewing').filter(r => r.dept === lastDept);
-  const alreadySent = getProdFlow('sewing_store').filter(x => x.status !== 'rejected');
+  const activeTransfers = getProdFlow('sewing_store').filter(x => 
+    x.status !== 'rejected' && x.status !== 'cancelled'
+  );
   const ready = {};
   finished.forEach(r => { ready[r.type] = (ready[r.type]||0) + (r.qty||0); });
-  alreadySent.forEach(s => { if (ready[s.type] !== undefined) ready[s.type] -= (s.qty||0); });
+  activeTransfers.forEach(s => {
+    const totalSent = s.sentQty || s.qty || 0;
+    const returned = s.returnedQty || 0;
+    const netDeduction = Math.max(0, totalSent - returned);
+    if (ready[s.type] !== undefined) ready[s.type] -= netDeduction;
+  });
   return Object.entries(ready)
-    .map(([type, qty]) => ({ type, qty }))
+    .map(([type, qty]) => ({ type, qty: Math.max(0, qty) }))
     .filter(x => x.qty > 0);
 }
 
@@ -6922,39 +7365,91 @@ function saveSewToStore() {
   if (qty > avail) { toast(lang==='am'?'ዝግጁ ካለው በላይ ነው':'Exceeds ready quantity','error'); return; }
 
   const today = new Date().toISOString().slice(0,10);
-  pushProdFlow({ id:uid(), stage:'sewing_store', date:today, type, qty, status:'pending_owner', sentBy:currentUser.username, sentByName:currentUser.name });
+  pushProdFlow({
+    id: uid(),
+    stage: 'sewing_store',
+    date: today,
+    type,
+    qty,
+    sentQty: qty,
+    receivedQty: 0,
+    returnedQty: 0,
+    damagedQty: 0,
+    status: 'in_transit',
+    sentBy: currentUser.username,
+    sentByName: currentUser.name || currentUser.username
+  });
 
-  document.getElementById('sewToStoreModal').remove();
+  document.getElementById('sewToStoreModal')?.remove();
   renderSewing();
-  toast(`📤 ${qty} ${type} → ${lang==='am'?'እቃ ቤት ተልኳል (ኦነሩ እንዲያፀድቀው ተልኳል)':'sent to Store (awaiting owner approval)'} ✓`);
+  renderStore();
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+  buildSidebar();
+  toast(`📤 ${qty} ${type} → ${lang==='am'?'እቃ ቤት ተልኳል':'sent to Store'} ✓`);
 }
 
-// Store clicks "✅ Confirm" on an incoming finished-goods shipment from Sewing —
-// opens a popup so they can pick/enter which shelf it will be placed on before it's confirmed.
+// Store clicks "Receive" on an incoming finished-goods shipment from Sewing
 function openReceiveShelfModal(id) {
   if (!canActStore() && currentUser.role !== 'owner') { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው እቃ ቤት ወይም ኦነር ብቻ ነው':'⛔ Only Store staff or Owner can confirm this','error'); return; }
   const x = getData('prodFlow').find(p => p.id === id);
   if (!x) return;
-  if (x.status === 'pending_owner') {
-    toast(lang==='am'?'⛔ አሁንም በኦነር አልፀደቀም — ኦነሩ ካፀደቀው በኋላ ነው የሚረጋገጠው':'⛔ Awaiting owner approval first', 'error');
-    return;
-  }
   const label = x.type;
-  // Existing shelf names used so far (from previously confirmed store items), for quick pick
+  const totalSent = x.sentQty || x.qty || 0;
+  const alreadyRec = x.receivedQty || 0;
+  const remQty = Math.max(0, totalSent - alreadyRec - (x.returnedQty || 0) - (x.damagedQty || 0));
   const shelves = [...new Set(getData('store').map(r => r.location).filter(l => l && l !== 'ከስፌት' && l !== 'From Sewing'))];
 
   const modal = document.createElement('div');
   modal.id = 'receiveShelfModal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
   modal.innerHTML = `
-    <div style="background:#1a1f2e;border-radius:14px;padding:20px;width:100%;max-width:400px;border:1px solid rgba(255,255,255,0.1)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <h3 style="color:var(--gold);font-size:15px;margin:0">📥 ${label} — ${lang==='am'?'ተቀበል':'Receive'}</h3>
+    <div style="background:#1a1f2e;border-radius:14px;padding:22px;width:100%;max-width:440px;border:1px solid rgba(255,255,255,0.12);box-shadow:0 12px 32px rgba(0,0,0,0.5)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h3 style="color:var(--gold);font-size:15.5px;margin:0">📥 ${label} — ${lang==='am'?'ወደ እቃ ቤት ተቀበል':'Receive to Store'}</h3>
         <button onclick="document.getElementById('receiveShelfModal').remove()" style="background:rgba(255,255,255,0.06);border:none;color:var(--white-dim);width:28px;height:28px;border-radius:8px;cursor:pointer">✕</button>
       </div>
-      <div style="background:rgba(79,195,247,0.08);border:1px solid rgba(79,195,247,0.25);border-radius:9px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--white)">
-        🪡 <strong style="color:#4FC3F7">${x.qty}</strong> ${label} — ${lang==='am'?'ከስፌት ክፍል':'from Sewing'}
+
+      <div style="background:rgba(79,195,247,0.08);border:1px solid rgba(79,195,247,0.25);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12.5px;color:var(--white)">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span>🪡 <b>${label}</b></span>
+          <span style="color:#4FC3F7;font-weight:700">${x.date}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;color:rgba(197,203,216,0.7);font-size:11.5px">
+          <span>📤 ${lang==='am'?'የተላከ ብዛት':'Total Sent'}: <b>${totalSent}</b></span>
+          <span>⏳ ${lang==='am'?'ቀሪ የሚጠበቅ':'Remaining'}: <b style="color:#80e080">${remQty}</b></span>
+        </div>
+        ${alreadyRec > 0 ? `<div style="font-size:11px;color:#80e080;margin-top:4px">✅ ቀደም ሲል የገባ: ${alreadyRec}</div>` : ''}
+        <div style="font-size:11px;color:rgba(197,203,216,0.5);margin-top:4px">👤 ${lang==='am'?'ከስፌት የላከው':'Sent by'}: ${x.sentByName||x.sentBy||'—'}</div>
       </div>
+
+      <div style="margin-bottom:14px">
+        <label style="font-size:11.5px;color:rgba(197,203,216,0.7);font-weight:700;display:block;margin-bottom:6px">
+          ${lang==='am'?'ተረክበው የገቡበት ብዛት (አሁን የደረሰው) *':'Received Quantity Now *'}
+        </label>
+        <input id="rsQty" type="number" min="1" max="${remQty}" value="${remQty}" oninput="checkRsDiff(${remQty})"
+          style="width:100%;padding:10px 12px;background:#0f1420;border:1px solid rgba(201,168,76,0.4);border-radius:9px;color:var(--white);font-family:inherit;font-size:15px;font-weight:700;outline:none;box-sizing:border-box" />
+      </div>
+
+      <!-- Discrepancy / Partial Action Box -->
+      <div id="rsDiffBox" style="display:none;background:rgba(255,167,38,0.08);border:1px solid rgba(255,167,38,0.3);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px">
+        <div style="color:#FFA726;font-weight:700;margin-bottom:8px">
+          ⚠️ <span id="rsDiffText"></span>
+        </div>
+        <div style="font-size:11px;color:rgba(197,203,216,0.7);margin-bottom:6px">${lang==='am'?'ለቀሪው ልዩነት ምን ይደረግ?':'What to do with the remaining difference?'}</div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;color:var(--white);font-size:12px">
+          <input type="radio" name="rsAction" value="rem_transit" checked />
+          <span>🚚 ${lang==='am'?'ቀሪው በመንገድ ላይ ይቆይ (በቀጣይ ዙር ሲደርስ ይረከባል)':'Keep remaining In Transit (arrive in next batch)'}</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;color:var(--white-size:12px">
+          <input type="radio" name="rsAction" value="rem_return" />
+          <span>↩️ ${lang==='am'?'ቀሪው ወደ ስፌት ክፍል ይመለስ (የስፌት ስቶክ ይመለስ)':'Return remaining to Sewing (restore ready stock)'}</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--white);font-size:12px">
+          <input type="radio" name="rsAction" value="rem_damage" />
+          <span>⚠️ ${lang==='am'?'እንደ ብልሽት/የጠፋ (ዳሜጅ) ይመዝገብ':'Record as Damage/Defect'}</span>
+        </label>
+      </div>
+
       ${shelves.length ? `
       <div style="margin-bottom:10px">
         <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">${lang==='am'?'ካሉት መደርደሪያዎች ምረጥ':'Pick an existing shelf'}</div>
@@ -6963,33 +7458,172 @@ function openReceiveShelfModal(id) {
           ${shelves.map(s=>`<option value="${s}">🗄️ ${s}</option>`).join('')}
         </select>
       </div>` : ''}
+
       <div style="margin-bottom:16px">
         <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">${lang==='am'?'መደርደሪያ *':'Shelf *'}</div>
         <input id="rsShelf" type="text" placeholder="${lang==='am'?'ለምሳሌ: መደርደሪያ A1':'e.g. Shelf A1'}"
           style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.3);border-radius:9px;color:var(--white);font-family:inherit;font-size:14px;font-weight:700;outline:none;box-sizing:border-box" />
       </div>
-      <div style="display:flex;gap:10px">
-        <button onclick="confirmSewToStore('${id}')" style="flex:1;padding:11px;background:linear-gradient(135deg,var(--gold),#A87820);color:var(--navy);border:none;border-radius:9px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer">✅ ${lang==='am'?'ተቀበልኩ':'Confirm'}</button>
-        <button onclick="document.getElementById('receiveShelfModal').remove()" style="padding:11px 18px;background:transparent;border:1px solid rgba(255,255,255,0.15);color:var(--white-dim);border-radius:9px;font-family:inherit;cursor:pointer">${lang==='am'?'ሰርዝ':'Cancel'}</button>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="confirmSewToStore('${id}', ${remQty})" style="flex:1;min-width:120px;padding:11px;background:linear-gradient(135deg,var(--gold),#A87820);color:var(--navy);border:none;border-radius:9px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer">
+          ✅ ${lang==='am'?'ተቀበልኩ':'Confirm Receipt'}
+        </button>
+        <button onclick="returnProdFlowTransfer('${id}')" style="padding:11px 14px;background:rgba(224,90,90,0.12);border:1px solid rgba(224,90,90,0.4);color:#FF9090;border-radius:9px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer">
+          ↩️ ${lang==='am'?'መልስ':'Return'}
+        </button>
+        <button onclick="document.getElementById('receiveShelfModal').remove()" style="padding:11px 14px;background:transparent;border:1px solid rgba(255,255,255,0.15);color:var(--white-dim);border-radius:9px;font-family:inherit;cursor:pointer">
+          ${lang==='am'?'ሰርዝ':'Cancel'}
+        </button>
       </div>
     </div>`;
   document.body.appendChild(modal);
 }
 
-// Store confirms finished goods physically arrived, placed on the chosen shelf — credits sellable store stock
-function confirmSewToStore(id) {
-  if (!canActStore()) { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው እቃ ቤት ብቻ ነው':'⛔ Only Store staff can confirm this','error'); return; }
+function checkRsDiff(remQty) {
+  const val = parseInt(document.getElementById('rsQty')?.value) || 0;
+  const box = document.getElementById('rsDiffBox');
+  const txt = document.getElementById('rsDiffText');
+  if (!box || !txt) return;
+  if (val > 0 && val < remQty) {
+    box.style.display = 'block';
+    const diff = remQty - val;
+    txt.textContent = lang==='am' ? `ያልተረከቡት ${diff} ቁራጭ ልዩነት አለ` : `Discrepancy: ${diff} pieces not received`;
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+// Store confirms finished goods physically arrived, placed on the chosen shelf
+function confirmSewToStore(id, remQtyParam) {
+  if (!canActStore() && currentUser.role !== 'owner') { toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው እቃ ቤት ወይም ኦነር ብቻ ነው':'⛔ Only Store staff or Owner can confirm this','error'); return; }
   const shelf = document.getElementById('rsShelf')?.value.trim();
   if (!shelf) { toast(lang==='am'?'መደርደሪያ ይምረጡ ወይም ያስገቡ':'Please pick or enter a shelf','error'); return; }
-  const x = updateProdFlow(id, { status:'confirmed', confirmedBy:currentUser.username, confirmedByName:currentUser.name, confirmedAt:new Date().toISOString() });
+  
+  const all = getData('prodFlow');
+  const x = all.find(p => p.id === id);
   if (!x) return;
-  const label = x.type;
+
+  const totalSent = x.sentQty || x.qty || 0;
+  const alreadyRec = x.receivedQty || 0;
+  const remQty = remQtyParam || Math.max(0, totalSent - alreadyRec - (x.returnedQty || 0) - (x.damagedQty || 0));
+
+  const rcvQty = parseInt(document.getElementById('rsQty')?.value);
+  if (!rcvQty || rcvQty <= 0 || rcvQty > remQty) {
+    toast(lang==='am'?'ልክ ያልሆነ ብዛት':'Invalid quantity', 'error');
+    return;
+  }
+
+  const action = document.querySelector('input[name="rsAction"]:checked')?.value || 'rem_transit';
+  const diff = remQty - rcvQty;
+
+  // 1. Credit store
   const store = getData('store');
-  store.push({ id:uid(), date:x.date, type:label, qty:x.qty, location:shelf });
+  store.push({ id:uid(), date: new Date().toISOString().slice(0,10), type: x.type, qty: rcvQty, location: shelf, prodFlowId: x.id });
   saveData('store', store);
+
+  // 2. Update transfer record
+  x.receivedQty = (x.receivedQty || 0) + rcvQty;
+  x.shelf = shelf;
+  x.confirmedBy = currentUser.username;
+  x.confirmedByName = currentUser.name || currentUser.username;
+  x.confirmedAt = new Date().toISOString();
+
+  if (diff > 0) {
+    if (action === 'rem_return') {
+      x.returnedQty = (x.returnedQty || 0) + diff;
+      x.status = 'confirmed';
+    } else if (action === 'rem_damage') {
+      x.damagedQty = (x.damagedQty || 0) + diff;
+      x.status = 'confirmed';
+      // Record damage in sewing
+      const sewData = getData('sewing');
+      sewData.push({ id:uid(), date: new Date().toISOString().slice(0,10), worker:'—', dept:getLastSewDeptKey(), type:x.type, qty:0, dmgQty:diff, note:`ወደ እቃ ቤት ሲደርስ የተመዘገበ ዳሜጅ (${x.type})` });
+      saveData('sewing', sewData);
+    } else {
+      // rem_transit
+      x.status = (x.receivedQty >= totalSent) ? 'confirmed' : 'partial';
+    }
+  } else {
+    x.status = 'confirmed';
+  }
+
+  saveData('prodFlow', all);
   document.getElementById('receiveShelfModal')?.remove();
-  renderStore(); renderSewing();
-  toast(lang==='am'?`✅ ${x.qty} ${label} → 🗄️ ${shelf} ውስጥ ተቀመጠ`:`✅ Confirmed — ${x.qty} ${label} placed on shelf "${shelf}"`);
+  renderStore();
+  renderSewing();
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+  renderDashboard();
+  buildSidebar();
+  toast(lang==='am'?`✅ ${rcvQty} ${x.type} → 🗄️ ${shelf} ውስጥ ተቀመጠ${diff>0?` (ቀሪ: ${diff})`:''}`:`✅ Confirmed — ${rcvQty} ${x.type} placed on shelf "${shelf}"`);
+}
+
+// Cancel sewing-to-store transfer (if not yet received)
+function cancelSewToStore(id) {
+  if (!confirm(lang==='am'?'ይህን ዝውውር መሰረዝ ይፈልጋሉ? እቃው ወደ ስፌት ክፍል ይመለሳል።':'Cancel this transfer? Goods will return to sewing.')) return;
+  const all = getData('prodFlow');
+  const x = all.find(p => p.id === id);
+  if (!x) return;
+  if (x.receivedQty && x.receivedQty > 0) {
+    toast(lang==='am'?'እቃው በከፊል ስለተረከበ መሰረዝ አይቻልም':'Cannot cancel — already partially received', 'error');
+    return;
+  }
+  x.status = 'cancelled';
+  x.cancelledBy = currentUser.username;
+  x.cancelledAt = new Date().toISOString();
+  saveData('prodFlow', all);
+  renderSewing();
+  renderStore();
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+  renderDashboard();
+  buildSidebar();
+  toast(lang==='am'?'❌ ዝውውሩ ተሰርዟል — እቃው ወደ ስፌት ተመልሷል':'Transfer cancelled — items returned to sewing');
+}
+
+// Generic return function for any incoming transfer
+function returnProdFlowTransfer(id) {
+  const reason = prompt(lang==='am'?'እቃውን የመመለሻ ምክንያት ያስገቡ (ለምሳሌ: የተሳሳተ እቃ / ጥራት የለውም):':'Reason for returning items:');
+  if (reason === null) return;
+  
+  const all = getData('prodFlow');
+  const x = all.find(p => p.id === id);
+  if (!x) return;
+
+  const totalSent = x.sentQty || x.qty || 0;
+  const alreadyRec = x.receivedQty || 0;
+  const returnQty = Math.max(0, totalSent - alreadyRec - (x.returnedQty || 0) - (x.damagedQty || 0));
+
+  x.status = alreadyRec > 0 ? 'confirmed' : 'returned';
+  x.returnedQty = (x.returnedQty || 0) + returnQty;
+  x.returnReason = reason || '—';
+  x.returnedBy = currentUser.username;
+  x.returnedByName = currentUser.name || currentUser.username;
+  x.returnedAt = new Date().toISOString();
+
+  if (x.stage === 'cutting_sewing' && x.cutId) {
+    const cutting = getData('cutting');
+    const cutRecord = cutting.find(c => c.id === x.cutId);
+    if (cutRecord) {
+      cutRecord.sentQty = Math.max(0, (cutRecord.sentQty || 0) - returnQty);
+      saveData('cutting', cutting);
+    }
+  } else if (x.stage === 'store_cutting') {
+    const rawStock = getData('rawStock');
+    const stock = rawStock.find(r => r.name === x.item);
+    if (stock) {
+      stock.qty += returnQty;
+      saveData('rawStock', rawStock);
+    }
+  }
+
+  saveData('prodFlow', all);
+  document.getElementById('receiveCutModal')?.remove();
+  document.getElementById('receiveShelfModal')?.remove();
+  refreshActivePanel();
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+  renderDashboard();
+  buildSidebar();
+  toast(lang==='am'?`↩️ ${returnQty} ${x.type||x.item} ወደ ላኪው ተመልሷል`:`↩️ Returned ${returnQty} items to sender`);
 }
 
 function renderCuttingFabricReport() {
@@ -8005,26 +8639,53 @@ function renderSewing() {
     }
   }
 
-  // ── 4. Sent-to-Store history (every shipment, pending or confirmed) ──
+  // ── 4. Sent-to-Store history (every shipment, in_transit, partial, confirmed, returned) ──
   const s2sHeadEl = document.getElementById('sewToStoreThead');
   const s2sBodyEl = document.getElementById('sewToStoreTbody');
   if (s2sHeadEl && s2sBodyEl) {
-    const h = lang==='am' ? ['ቀን','አይነት','ብዛት','ላከው','ሁኔታ','ያረጋገጠው'] : ['Date','Type','Qty','Sent By','Status','Confirmed By'];
+    const h = lang==='am' ? ['ቀን','አይነት','የተላከ','የገባ','ቀሪ','ሁኔታ','መደርደሪያ / ተቀባይ','እርምጃ'] : ['Date','Type','Sent','Received','Remaining','Status','Shelf / Receiver','Actions'];
     s2sHeadEl.innerHTML = `<tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>`;
     const ship = getProdFlow('sewing_store');
     s2sBodyEl.innerHTML = ship.length
-      ? [...ship].sort((a,b)=>b.date.localeCompare(a.date)).map(x=>`<tr>
-          <td style="white-space:nowrap;color:var(--white-dim)">${x.date}</td>
-          <td style="font-weight:600;color:var(--white)">${x.type}</td>
-          <td style="text-align:center;font-weight:700;color:var(--gold)">${x.qty}</td>
-          <td style="color:var(--white-dim)">${x.sentByName||x.sentBy||'—'}</td>
-          <td>${x.status==='pending'
-              ? `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;color:#FFA726;background:rgba(255,167,38,0.12);border:1px solid rgba(255,167,38,0.3)">⏳ ${lang==='am'?'እቃ ቤት ሊያረጋግጥ':'Awaiting Store'}</span>`
-              : `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;color:#80e080;background:rgba(76,175,80,0.12);border:1px solid rgba(76,175,80,0.3)">✅ ${lang==='am'?'ተረጋግጧል':'Confirmed'}</span>`}</td>
-          <td style="color:var(--white-dim)">${x.confirmedByName||x.confirmedBy||'—'}</td>
-        </tr>`).join('')
+      ? [...ship].sort((a,b)=>b.date.localeCompare(a.date)).map(x=>{
+          const sent = x.sentQty || x.qty || 0;
+          const rcv = x.receivedQty || 0;
+          const rem = Math.max(0, sent - rcv - (x.returnedQty || 0) - (x.damagedQty || 0));
+
+          let statusBadge = '';
+          if (x.status === 'in_transit' || x.status === 'pending' || x.status === 'pending_owner') {
+            statusBadge = `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;color:#FFA726;background:rgba(255,167,38,0.12);border:1px solid rgba(255,167,38,0.3)">🚚 ${lang==='am'?'በመንገድ ላይ':'In Transit'}</span>`;
+          } else if (x.status === 'partial') {
+            statusBadge = `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;color:#4FC3F7;background:rgba(79,195,247,0.12);border:1px solid rgba(79,195,247,0.3)">⚠️ ${lang==='am'?'በከፊል የገባ':'Partial'} (${rcv}/${sent})</span>`;
+          } else if (x.status === 'confirmed') {
+            statusBadge = `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;color:#80e080;background:rgba(76,175,80,0.12);border:1px solid rgba(76,175,80,0.3)">✅ ${lang==='am'?'ተረክቧል':'Received'}</span>`;
+          } else if (x.status === 'returned') {
+            statusBadge = `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;color:#FF9090;background:rgba(224,90,90,0.12);border:1px solid rgba(224,90,90,0.3)">↩️ ${lang==='am'?'የተመለሰ':'Returned'}</span>`;
+          } else if (x.status === 'cancelled') {
+            statusBadge = `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;color:var(--white-dim);background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12)">❌ ${lang==='am'?'የተሰረዘ':'Cancelled'}</span>`;
+          }
+
+          const canCancel = (isSewDeptManager() || currentUser.role === 'owner') && rcv === 0 && (x.status === 'in_transit' || x.status === 'pending' || x.status === 'pending_owner');
+          const actCell = canCancel 
+            ? `<button onclick="cancelSewToStore('${x.id}')" style="padding:3px 8px;font-size:10px;font-weight:700;font-family:inherit;border-radius:6px;border:1px solid rgba(224,90,90,0.4);background:rgba(224,90,90,0.1);color:#FF9090;cursor:pointer">❌ ${lang==='am'?'ሰርዝ':'Cancel'}</button>`
+            : '—';
+
+          const shelfRec = x.shelf ? `🗄️ ${x.shelf} (${x.confirmedByName||x.confirmedBy||''})` : (x.confirmedByName||x.confirmedBy||'—');
+
+          return `<tr>
+            <td style="white-space:nowrap;color:var(--white-dim)">${x.date}</td>
+            <td style="font-weight:600;color:var(--white)">${x.type}</td>
+            <td style="text-align:center;font-weight:700;color:var(--gold)">${sent}</td>
+            <td style="text-align:center;color:#80e080;font-weight:600">${rcv}</td>
+            <td style="text-align:center;color:${rem>0?'#FFA726':'var(--white-dim)'};font-weight:700">${rem}</td>
+            <td>${statusBadge}</td>
+            <td style="color:var(--white-dim);font-size:11px">${shelfRec}</td>
+            <td style="text-align:center">${actCell}</td>
+          </tr>`;
+        }).join('')
       : noDataRow(h.length);
   }
+  if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
 
   // ── 5. Full sewing record details (collapsible tab) ──
   const detHeadEl = document.getElementById('sewDetailThead');
@@ -8206,17 +8867,29 @@ function approveProdFlowTransfer(id) {
     toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ኦነር ብቻ ነው':'⛔ Only owner can approve','error');
     return;
   }
-  const x = updateProdFlow(id, {
-    status: 'approved',
-    approvedBy: currentUser.username,
-    approvedByName: currentUser.name,
-    approvedAt: new Date().toISOString()
-  });
+  const all = getData('prodFlow');
+  const x = all.find(p => p.id === id);
   if (!x) return;
-  refreshActivePanel();
-  renderDashboard();
-  buildSidebar();
-  toast(lang==='am'?`✅ የ${x.type} ዝውውር ፀድቋል — ተቀባዩ ክፍል ሊያረጋግጥ ይችላል`:`✅ Transfer of ${x.type} approved — target dept can confirm`);
+
+  if (x.stage === 'cutting_sewing') {
+    openReceiveCutModal(id);
+  } else if (x.stage === 'sewing_store') {
+    openReceiveShelfModal(id);
+  } else if (x.stage === 'store_cutting') {
+    confirmStoreToCutting(id);
+  } else {
+    updateProdFlow(id, {
+      status: 'confirmed',
+      confirmedBy: currentUser.username,
+      confirmedByName: currentUser.name,
+      confirmedAt: new Date().toISOString()
+    });
+    refreshActivePanel();
+    renderDashboard();
+    buildSidebar();
+    if (typeof renderProdPipelineOverview === 'function') renderProdPipelineOverview();
+    toast(lang==='am'?`✅ ዝውውሩ ተረጋግጧል`:`✅ Transfer confirmed`);
+  }
 }
 
 function rejectProdFlowTransfer(id) {
@@ -8224,26 +8897,7 @@ function rejectProdFlowTransfer(id) {
     toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ኦነር ብቻ ነው':'⛔ Only owner can reject','error');
     return;
   }
-  const x = updateProdFlow(id, {
-    status: 'rejected',
-    rejectedBy: currentUser.username,
-    rejectedByName: currentUser.name,
-    rejectedAt: new Date().toISOString()
-  });
-  if (!x) return;
-  
-  if (x.stage === 'cutting_sewing' && x.cutId) {
-    const cutting = getData('cutting');
-    const cutRecord = cutting.find(c => c.id === x.cutId);
-    if (cutRecord) {
-      cutRecord.sentQty = Math.max(0, (cutRecord.sentQty || 0) - x.qty);
-      saveData('cutting', cutting);
-    }
-  }
-  
-  refreshActivePanel();
-  renderDashboard();
-  toast(lang==='am'?'❌ ዝውውሩ ውድቅ ሆኗል':'Transfer rejected', 'warning');
+  returnProdFlowTransfer(id);
 }
 
 // ── OWNER REFUND REPORT ──────────────────────────────────────────
