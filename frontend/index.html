@@ -350,6 +350,8 @@
             </div>
             <div id="cuttingStoreIncoming"></div>
             <div id="cuttingRawCards"></div>
+            <!-- Sequential Handover Pipeline for Cutting Sections -->
+            <div id="cuttingStagePipeline" style="margin-bottom:12px"></div>
             <!-- Period stats + bar chart -->
             <div id="cuttingStats" style="margin-bottom:4px"></div>
             <!-- Fabric stock report -->
@@ -401,6 +403,9 @@
               <button class="btn-outline" onclick="exportTablePDF('sewing')" id="btnExportSewing">📥 PDF</button>
             </div>
             <div id="sewingRawCards"></div>
+
+            <!-- Sequential Handover Pipeline for Sewing Sections -->
+            <div id="sewingStagePipeline" style="margin-bottom:12px"></div>
 
             <!-- Finished products ready to send to Store -->
             <div class="card mt-0" style="padding:14px;margin-bottom:14px">
@@ -1481,27 +1486,35 @@
   <!-- CUTTING -->
   <div class="modal-overlay hidden" id="cuttingModal" onclick="if(event.target===this)closeModal('cuttingModal')">
     <div class="modal-box">
-      <h3 class="modal-title">✂️ ቆረጣ ጨምር</h3>
+      <h3 class="modal-title">✂️ የቆረጣ ምዝገባ</h3>
       <div class="form-grid">
         <div class="form-group"><label>ቀን</label><input type="date" id="cutDate" /></div>
-        <div class="form-group"><label>የልብስ አይነት *</label><select id="cutType" class="form-input"></select></div>
-        <div class="form-group"><label>ቆረጣ ብዛት (ልብስ)</label><input type="number" id="cutQty" min="1" placeholder="0" />
+        <div class="form-group">
+          <label>ሴክሽን / ደረጃ *</label>
+          <select id="cutDept" class="form-input" onchange="handleCutDeptChange()"></select>
         </div>
         <div class="form-group">
+          <label>የልብስ አይነት *</label>
+          <select id="cutType" class="form-input" onchange="handleCutTypeChange()"></select>
+          <div id="cutStageAvailNotice" style="font-size:11px;color:var(--gold);margin-top:4px"></div>
+        </div>
+        <div class="form-group"><label>ብዛት (ልብስ) *</label><input type="number" id="cutQty" min="1" placeholder="0" /></div>
+        <div class="form-group" id="cutFabricGroup">
           <label>የጨርቅ አይነት <span style="font-size:10px;color:rgba(197,203,216,0.5)">(ከክምችት)</span></label>
           <select id="cutFabric" class="form-input" onchange="cutUpdateFabricStock()">
             <option value="">— ጨርቅ ምረጥ —</option>
           </select>
           <div id="cutFabricStock" style="font-size:11px;color:var(--white-dim);margin-top:4px"></div>
         </div>
-        <div class="form-group">
+        <div class="form-group" id="cutFabricQtyGroup">
           <label>የጨርቅ ፍጆታ <span style="font-size:10px;color:rgba(197,203,216,0.5)">(ለዚህ ቆረጣ)</span></label>
           <input type="number" id="cutFabricQty" min="0.1" step="0.1" placeholder="0.0" class="form-input"
             oninput="cutUpdateFabricStock()" />
           <div id="cutFabricUnit" style="font-size:10px;color:rgba(197,203,216,0.4);margin-top:2px"></div>
         </div>
+        <div class="form-group"><label>ዳሜጅ ብዛት</label><input type="number" id="cutDmgQty" min="0" value="0" placeholder="0" /></div>
         <div class="form-group"><label>ሰራተኛ</label><input type="text" id="cutOperator" /></div>
-        <div class="form-group"><label>ማስታወሻ</label><input type="text" id="cutNote" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>ማስታወሻ</label><input type="text" id="cutNote" /></div>
       </div>
       <div class="modal-actions">
         <button class="btn-gold" onclick="saveCutting()">✂️ አስቀምጥ</button>
@@ -1550,15 +1563,19 @@
           <select id="sewWorker" class="form-input"></select>
         </div>
         <div class="form-group">
-          <label>ሙያ *</label>
+          <label>ሙያ / ዘርፍ *</label>
           <select id="sewDept" class="form-input" onchange="handleSewDeptSelectChange(this)"></select>
         </div>
-        <div class="form-group"><label>የልብስ አይነት *</label><select id="sewType" class="form-input"></select></div>
+        <div class="form-group">
+          <label>የልብስ አይነት *</label>
+          <select id="sewType" class="form-input" onchange="handleSewTypeChange()"></select>
+          <div id="sewStageAvailNotice" style="font-size:11px;color:var(--gold);margin-top:4px"></div>
+        </div>
         <div class="form-group"><label>ብዛት *</label><input type="number" id="sewQty" min="1" class="form-input"
             placeholder="0" /></div>
         <div class="form-group"><label>ዳሜጅ ብዛት</label><input type="number" id="sewDmgQty" min="0" value="0"
             class="form-input" /></div>
-        <div class="form-group"><label>ማስታወሻ</label><input type="text" id="sewNote" class="form-input"
+        <div class="form-group" style="grid-column:1/-1"><label>ማስታወሻ</label><input type="text" id="sewNote" class="form-input"
             placeholder="ምንም" /></div>
       </div>
       <div class="modal-actions">

@@ -245,36 +245,56 @@ app.post('/api/sync/:key', async (req, res) => {
 
       const getItemKey = item => {
         if (!item || typeof item !== 'object') return null;
+        if (key === 'branchStock' && item.branch && item.type) return 'bs:' + item.branch + ':' + item.type;
+        if (key === 'sewingCutStock' && item.type) return 'scs:' + item.type;
+        if ((key === 'cuttingRaw' || key === 'rawStock') && item.name) return 'raw:' + item.name;
+        if (key === 'productPrices' && item.type) return 'pp:' + item.type;
+        if ((key === 'sewingDeptMeta' || key === 'cuttingDeptMeta') && item.key) return 'dept:' + item.key;
         if (item.id !== undefined && item.id !== null) return 'id:' + item.id;
         if (item._id !== undefined && item._id !== null) return 'id:' + item._id;
+        if (item.branch && item.type) return 'bt:' + item.branch + ':' + item.type;
         if (item.name !== undefined && item.name !== null) return 'name:' + item.name;
         if (item.type !== undefined && item.type !== null && item.date !== undefined) return 'td:' + item.type + ':' + item.date;
-        return null;
+        try { return 'json:' + JSON.stringify(item); } catch { return null; }
       };
 
       const map = new Map();
-      // First, seed with all items from oldValue (persisted server state)
+      // First, seed with items from oldValue (persisted server state)
       oldValue.forEach(item => {
+        const itemId = item && (item.id !== undefined ? String(item.id) : (item._id !== undefined ? String(item._id) : null));
+        if (itemId && delSet.has(itemId)) return;
         const k = getItemKey(item);
-        if (k && !delSet.has(String(item.id))) {
-          map.set(k, item);
-        }
+        if (k) map.set(k, item);
       });
 
       // Next, overlay with all items from incoming client value (updates and new additions)
       value.forEach(item => {
+        const itemId = item && (item.id !== undefined ? String(item.id) : (item._id !== undefined ? String(item._id) : null));
+        if (itemId && delSet.has(itemId)) return;
         const k = getItemKey(item);
-        if (k && !delSet.has(String(item.id))) {
-          map.set(k, item);
-        }
+        if (k) map.set(k, item);
       });
 
       // Ensure explicitly deleted IDs are removed
       delSet.forEach(delId => {
         map.delete('id:' + delId);
+        map.delete(String(delId));
       });
 
-      finalValue = Array.from(map.values());
+      let merged = Array.from(map.values());
+
+      // Special deduplication for expenses (procurement expense duplicates)
+      if (key === 'expenses') {
+        const seenProcOrders = new Set();
+        merged = merged.filter(e => {
+          if (!e || !e.procOrderId) return true;
+          if (seenProcOrders.has(e.procOrderId)) return false;
+          seenProcOrders.add(e.procOrderId);
+          return true;
+        });
+      }
+
+      finalValue = merged;
     }
 
     await db.setKey(key, finalValue);

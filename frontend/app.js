@@ -118,19 +118,166 @@ const SALES_LOW = 5;   // sales low stock threshold
 function loadData(key, def) {
   try { return JSON.parse(localStorage.getItem('a2_' + key)) || def; } catch { return def; }
 }
-function saveData(key, val, deletedId) {
+function saveData(key, val, deletedId, deletedIds) {
+  let delIds = [];
+  if (Array.isArray(deletedIds)) delIds = [...deletedIds];
+  if (deletedId && !delIds.includes(deletedId)) delIds.push(deletedId);
+
+  // If val is an array, automatically detect any IDs that were in the previous array but are missing in val
+  if (Array.isArray(val)) {
+    const prev = loadData(key, []);
+    if (Array.isArray(prev) && prev.length > val.length) {
+      const newIdSet = new Set(val.map(x => x && (x.id || x._id)).filter(Boolean));
+      prev.forEach(x => {
+        const xId = x && (x.id || x._id);
+        if (xId && !newIdSet.has(xId) && !delIds.includes(xId)) {
+          delIds.push(xId);
+        }
+      });
+    }
+  }
+
   localStorage.setItem('a2_' + key, JSON.stringify(val));
-  if (key !== 'users') syncToServer(key, val, deletedId); // `users` never goes through generic endpoint
+  if (key !== 'users') syncToServer(key, val, delIds.length === 1 ? delIds[0] : null, delIds);
 }
 function getData(key) { return loadData(key, []); }
+
+// ── SANITIZE & DEDUPLICATE SYSTEM ARRAYS (removes double counting / phantom stock) ──
+function sanitizeAllData() {
+  let changed = false;
+
+  // 1. Deduplicate branchStock by (branch, type)
+  const bs = loadData('branchStock', []);
+  if (Array.isArray(bs) && bs.length) {
+    const map = new Map();
+    let dupFound = false;
+    bs.forEach(item => {
+      if (!item || !item.branch || !item.type) return;
+      const k = item.branch + '::' + item.type;
+      if (map.has(k)) {
+        dupFound = true;
+        const ex = map.get(k);
+        ex.qty = (ex.qty || 0) + (item.qty || 0);
+      } else {
+        map.set(k, { id: item.id || uid(), branch: item.branch, type: item.type, qty: Math.max(0, item.qty || 0) });
+      }
+    });
+    if (dupFound || map.size !== bs.length) {
+      const cleanBs = Array.from(map.values());
+      localStorage.setItem('a2_branchStock', JSON.stringify(cleanBs));
+      syncToServer('branchStock', cleanBs);
+      changed = true;
+    }
+  }
+
+  // 2. Deduplicate sewingCutStock by type
+  const scs = loadData('sewingCutStock', []);
+  if (Array.isArray(scs) && scs.length) {
+    const map = new Map();
+    let dupFound = false;
+    scs.forEach(item => {
+      if (!item || !item.type) return;
+      const k = item.type;
+      if (map.has(k)) {
+        dupFound = true;
+        const ex = map.get(k);
+        ex.qty = (ex.qty || 0) + (item.qty || 0);
+      } else {
+        map.set(k, { id: item.id || uid(), type: item.type, qty: Math.max(0, item.qty || 0) });
+      }
+    });
+    if (dupFound || map.size !== scs.length) {
+      const cleanScs = Array.from(map.values());
+      localStorage.setItem('a2_sewingCutStock', JSON.stringify(cleanScs));
+      syncToServer('sewingCutStock', cleanScs);
+      changed = true;
+    }
+  }
+
+  // 3. Deduplicate cuttingRaw by name
+  const cr = loadData('cuttingRaw', []);
+  if (Array.isArray(cr) && cr.length) {
+    const map = new Map();
+    let dupFound = false;
+    cr.forEach(item => {
+      if (!item || !item.name) return;
+      const k = item.name;
+      if (map.has(k)) {
+        dupFound = true;
+        const ex = map.get(k);
+        ex.qty = (ex.qty || 0) + (item.qty || 0);
+        if (item.unit) ex.unit = item.unit;
+      } else {
+        map.set(k, { id: item.id || uid(), name: item.name, qty: Math.max(0, item.qty || 0), unit: item.unit || '' });
+      }
+    });
+    if (dupFound || map.size !== cr.length) {
+      const cleanCr = Array.from(map.values());
+      localStorage.setItem('a2_cuttingRaw', JSON.stringify(cleanCr));
+      syncToServer('cuttingRaw', cleanCr);
+      changed = true;
+    }
+  }
+
+  // 4. Deduplicate rawStock by name
+  const rs = loadData('rawStock', []);
+  if (Array.isArray(rs) && rs.length) {
+    const map = new Map();
+    let dupFound = false;
+    rs.forEach(item => {
+      if (!item || !item.name) return;
+      const k = item.name;
+      if (map.has(k)) {
+        dupFound = true;
+        const ex = map.get(k);
+        ex.qty = (ex.qty || 0) + (item.qty || 0);
+        if (item.unit) ex.unit = item.unit;
+      } else {
+        map.set(k, { id: item.id || uid(), name: item.name, qty: Math.max(0, item.qty || 0), unit: item.unit || '' });
+      }
+    });
+    if (dupFound || map.size !== rs.length) {
+      const cleanRs = Array.from(map.values());
+      localStorage.setItem('a2_rawStock', JSON.stringify(cleanRs));
+      syncToServer('rawStock', cleanRs);
+      changed = true;
+    }
+  }
+
+  // 5. Deduplicate expenses by procOrderId
+  const exp = loadData('expenses', []);
+  if (Array.isArray(exp) && exp.length) {
+    const seen = new Set();
+    const cleanExp = [];
+    const prunedIds = [];
+    exp.forEach(e => {
+      if (!e) return;
+      if (e.procOrderId) {
+        if (seen.has(e.procOrderId)) {
+          if (e.id) prunedIds.push(e.id);
+          return;
+        }
+        seen.add(e.procOrderId);
+      }
+      cleanExp.push(e);
+    });
+    if (prunedIds.length) {
+      localStorage.setItem('a2_expenses', JSON.stringify(cleanExp));
+      syncToServer('expenses', cleanExp, null, prunedIds);
+      changed = true;
+    }
+  }
+
+  return changed;
+}
 
 // ── SYNC OUTBOX (prevents offline data loss or transfer overwrites) ──
 function getSyncOutbox() {
   try { return JSON.parse(localStorage.getItem('a2_syncOutbox') || '{}'); } catch { return {}; }
 }
-function addToSyncOutbox(key, val, deletedId) {
+function addToSyncOutbox(key, val, deletedId, deletedIds) {
   const box = getSyncOutbox();
-  box[key] = { value: val, deletedId, time: Date.now() };
+  box[key] = { value: val, deletedId, deletedIds, time: Date.now() };
   localStorage.setItem('a2_syncOutbox', JSON.stringify(box));
 }
 function clearSyncOutboxItem(key) {
@@ -151,7 +298,7 @@ async function flushSyncOutbox() {
       const res = await fetch('/api/sync/' + encodeURIComponent(k), {
         method: 'POST',
         headers: apiHeaders(),
-        body: JSON.stringify({ value: entry.value, deletedId: entry.deletedId }),
+        body: JSON.stringify({ value: entry.value, deletedId: entry.deletedId, deletedIds: entry.deletedIds }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -187,12 +334,12 @@ async function apiFetch(url, options = {}) {
   }
   return body;
 }
-async function syncToServer(key, val, deletedId) {
+async function syncToServer(key, val, deletedId, deletedIds) {
   try {
     const res = await fetch('/api/sync/' + encodeURIComponent(key), {
       method: 'POST',
       headers: apiHeaders(),
-      body: JSON.stringify({ value: val, deletedId }),
+      body: JSON.stringify({ value: val, deletedId, deletedIds }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -202,11 +349,11 @@ async function syncToServer(key, val, deletedId) {
       clearSyncOutboxItem(key);
       return true;
     } else {
-      addToSyncOutbox(key, val, deletedId);
+      addToSyncOutbox(key, val, deletedId, deletedIds);
       return false;
     }
   } catch (e) {
-    addToSyncOutbox(key, val, deletedId);
+    addToSyncOutbox(key, val, deletedId, deletedIds);
     return false;
   }
 }
@@ -225,6 +372,7 @@ async function pullFromServer() {
         localStorage.setItem('a2_' + key, JSON.stringify(all[key]));
       }
     });
+    sanitizeAllData();
     return true;
   } catch (e) {
     return false;
@@ -382,6 +530,7 @@ function initData() {
     saveData('sewingRaw', []);
     saveData('sewingCutStock', []);
     saveData('sewingDeptMeta', []); // re-seeded automatically with the built-in departments on first use
+    saveData('cuttingDeptMeta', []);
     saveData('prodFlow', []);
     saveData('fixedAssets', []);
     saveData('teamChat', []);
@@ -397,7 +546,11 @@ function initData() {
   if (loadData('rawDispatches', null) === null) saveData('rawDispatches', []);
   if (loadData('cuttingRaw', null) === null) saveData('cuttingRaw', []);
   if (loadData('sewingRaw', null) === null) saveData('sewingRaw', []);
+  if (loadData('cuttingDeptMeta', null) === null) saveData('cuttingDeptMeta', []);
   if (loadData('pendingEdits', null) === null) saveData('pendingEdits', []);
+
+  // Run global deduplication and clean up any past sync anomalies
+  sanitizeAllData();
 
   // Sync procurement expenses into finance
   syncProcurementExpenses();
@@ -421,11 +574,21 @@ function syncProcurementExpenses() {
     return true;
   });
 
+  const prunedIds = [];
+  const seenProcOrders = new Set();
+
   // Generate clean procurement expense entries for all valid orders
   const procExpenses = validOrders.map(o => {
     const cost = Number(o.cost) || 0;
     const shortId = o.id ? o.id.slice(-5) : '';
-    const existing = expenses.find(e => e.procOrderId === o.id || (shortId && e.desc && e.desc.includes(`#${shortId}`)));
+    const matches = expenses.filter(e => e.procOrderId === o.id || (shortId && e.desc && e.desc.includes(`#${shortId}`)));
+    const existing = matches[0];
+    if (matches.length > 1) {
+      for (let i = 1; i < matches.length; i++) {
+        if (matches[i].id) prunedIds.push(matches[i].id);
+      }
+    }
+    seenProcOrders.add(o.id);
     return {
       id: existing ? existing.id : uid(),
       date: o.date || new Date().toISOString().slice(0, 10),
@@ -439,8 +602,19 @@ function syncProcurementExpenses() {
 
   const synced = [...nonProcExpenses, ...procExpenses];
 
+  // Track any obsolete procurement expenses in storage that no longer match any valid order
+  expenses.forEach(e => {
+    if (e && e.id) {
+      const isProc = e.procOrderId || (e.category === 'ግዥ' || e.category === 'Procurement');
+      const isKept = synced.some(s => s.id === e.id);
+      if (isProc && !isKept && !prunedIds.includes(e.id)) {
+        prunedIds.push(e.id);
+      }
+    }
+  });
+
   if (JSON.stringify(expenses) !== JSON.stringify(synced)) {
-    saveData('expenses', synced);
+    saveData('expenses', synced, null, prunedIds);
   }
   return synced;
 }
@@ -1889,36 +2063,229 @@ function clothingTypeOptionsHTML(selected) {
     prices.map(p => `<option value="${p.type}" ${p.type===selected?'selected':''}>${p.type}</option>`).join('');
 }
 
-// For the FIRST department in the sequence, only types actually received from Cutting (with
-// stock > 0) can be picked — this is what "ready for sewing" means. Every other department
-// works on pieces already in process, so it uses the full owner clothing-type catalog.
+// ═══════════════════════════════════════════════════════════════
+// CUTTING SECTIONS & PIPELINE (Sequential Handover)
+// ═══════════════════════════════════════════════════════════════
+const CUT_DEPTS = {
+  spreading: { label: 'ማንጣፍ (Spreading / Laying)', icon: '📐' },
+  cutting:   { label: 'መቁረጥ (Pattern / Cutting)',    icon: '✂️' },
+  bundling:  { label: 'ማሰር / መለየት (Bundling / QC)', icon: '🏷️' },
+};
+const CUT_DEPT_BASE_COLORS = { spreading: '#4FC3F7', cutting: '#FFA726', bundling: '#80E080' };
+
+function ensureCutDeptMeta() {
+  let meta = getData('cuttingDeptMeta');
+  if (meta && meta.length) return meta;
+  meta = Object.entries(CUT_DEPTS).map(([k, v]) => ({
+    key: k, label: v.label, icon: v.icon, color: CUT_DEPT_BASE_COLORS[k] || '#C9A84C', active: true, builtin: true
+  }));
+  saveData('cuttingDeptMeta', meta);
+  return meta;
+}
+function getCutDeptMeta() { return ensureCutDeptMeta(); }
+function saveCutDeptMeta(meta) { saveData('cuttingDeptMeta', meta); }
+
+function getFirstCutDeptKey() {
+  const active = getCutDeptMeta().filter(d => d.active !== false);
+  return active.length ? active[0].key : 'spreading';
+}
+function getLastCutDeptKey() {
+  const active = getCutDeptMeta().filter(d => d.active !== false);
+  return active.length ? active[active.length - 1].key : 'bundling';
+}
+function getAllCutDepts() {
+  const all = {};
+  getCutDeptMeta().forEach(d => {
+    all[d.key] = { label: d.label, icon: d.icon, color: d.color, active: d.active !== false, builtin: !!d.builtin };
+  });
+  return all;
+}
+function getCutDeptColor(key) {
+  return (getAllCutDepts()[key] || {}).color || '#C9A84C';
+}
+function cutDeptOptionsHTML(selectedKey) {
+  const meta = getCutDeptMeta().filter(d => d.active !== false);
+  return meta.map(d => `<option value="${d.key}" ${selectedKey === d.key ? 'selected' : ''}>${d.icon} ${d.label}</option>`).join('');
+}
+
+function getCutDeptAvailableQty(deptKey, productType) {
+  const meta = getCutDeptMeta().filter(d => d.active !== false);
+  const idx = meta.findIndex(d => d.key === deptKey);
+  if (idx <= 0) return Infinity; // Stage 1 (Spreading) takes raw fabric, not limited by garments
+  const prevDeptKey = meta[idx - 1].key;
+  const cuttingData = getData('cutting');
+  const prevCompleted = cuttingData
+    .filter(r => (r.dept === prevDeptKey || (!r.dept && prevDeptKey === meta[0].key)) && r.type === productType)
+    .reduce((a, r) => a + (r.qty || 0), 0);
+  const currentProcessed = cuttingData
+    .filter(r => r.dept === deptKey && r.type === productType)
+    .reduce((a, r) => a + (r.qty || 0) + (r.dmgQty || 0), 0);
+  return Math.max(0, prevCompleted - currentProcessed);
+}
+
+function cutTypeOptionsForDept(deptKey, selected) {
+  const prices = getData('productPrices');
+  if (!prices.length) return `<option value="">— ${lang==='am'?'ምንም የልብስ አይነት አልተመዘገበም':'No clothing types set'} —</option>`;
+  const firstDept = getFirstCutDeptKey();
+  if (deptKey === firstDept) {
+    return `<option value="">— ${lang==='am'?'ምረጥ':'Select'} —</option>` +
+      prices.map(p => `<option value="${p.type}" ${p.type === selected ? 'selected' : ''}>${p.type}</option>`).join('');
+  }
+  const meta = getCutDeptMeta().filter(d => d.active !== false);
+  const idx = meta.findIndex(d => d.key === deptKey);
+  const prevDept = idx > 0 ? meta[idx - 1] : null;
+  const prevLabel = prevDept ? prevDept.label : '';
+
+  const availList = [];
+  prices.forEach(p => {
+    const avail = getCutDeptAvailableQty(deptKey, p.type);
+    if (avail > 0 || p.type === selected) {
+      availList.push({ type: p.type, avail });
+    }
+  });
+
+  if (!availList.length) {
+    return `<option value="">— ${lang==='am' ? `ከ${prevLabel} የተጠናቀቀ አልባሳት የለም` : `No items ready from ${prevLabel}`} —</option>`;
+  }
+
+  return `<option value="">— ${lang==='am'?'ምረጥ':'Select'} —</option>` +
+    availList.map(p => `<option value="${p.type}" ${p.type === selected ? 'selected' : ''}>${p.type} (${lang==='am'?'ዝግጁ':'ready'}: ${p.avail})</option>`).join('');
+}
+
+function handleCutDeptChange() {
+  const deptSel = document.getElementById('cutDept');
+  const typeSel = document.getElementById('cutType');
+  const fabGroup = document.getElementById('cutFabricGroup');
+  const fabQtyGroup = document.getElementById('cutFabricQtyGroup');
+  if (!deptSel) return;
+  const deptKey = deptSel.value || getFirstCutDeptKey();
+  const isFirst = deptKey === getFirstCutDeptKey();
+
+  if (fabGroup) fabGroup.style.display = isFirst ? '' : 'none';
+  if (fabQtyGroup) fabQtyGroup.style.display = isFirst ? '' : 'none';
+
+  if (typeSel) {
+    typeSel.innerHTML = cutTypeOptionsForDept(deptKey, typeSel.value);
+  }
+  handleCutTypeChange();
+}
+
+function handleCutTypeChange() {
+  const deptSel = document.getElementById('cutDept');
+  const typeSel = document.getElementById('cutType');
+  const noticeEl = document.getElementById('cutStageAvailNotice');
+  if (!deptSel || !typeSel || !noticeEl) return;
+
+  const deptKey = deptSel.value || getFirstCutDeptKey();
+  const type = typeSel.value;
+  const meta = getCutDeptMeta().filter(d => d.active !== false);
+  const idx = meta.findIndex(d => d.key === deptKey);
+
+  if (idx <= 0) {
+    noticeEl.innerHTML = `<span style="color:#80e080">🧵 ${lang==='am'?'ደረጃ 1፦ ጨርቅ ከክምችት ተቆርጦ ማንጣፍ ይጀምራል':'Stage 1: Fabric is spread from raw stock'}</span>`;
+    return;
+  }
+  if (!type) {
+    noticeEl.innerHTML = '';
+    return;
+  }
+  const prevDept = meta[idx - 1];
+  const cuttingData = getData('cutting');
+  const prevCompleted = cuttingData
+    .filter(r => (r.dept === prevDept.key || (!r.dept && prevDept.key === meta[0].key)) && r.type === type)
+    .reduce((a, r) => a + (r.qty || 0), 0);
+  const avail = getCutDeptAvailableQty(deptKey, type);
+
+  if (avail > 0) {
+    noticeEl.innerHTML = `<span style="color:#80e080">✅ ${prevDept.icon} ከ"${prevDept.label}" የተጠናቀቀ: <b>${prevCompleted}</b> | ለዚህ ደረጃ ዝግጁ: <b>${avail}</b> pcs</span>`;
+  } else {
+    noticeEl.innerHTML = `<span style="color:#FF9090">⛔ ${prevDept.icon} ከ"${prevDept.label}" የተጠናቀቀ የለም ወይም አልቋል (የተጠናቀቀው: ${prevCompleted}፣ ዝግጁ: 0)</span>`;
+  }
+}
+
+// ── SEWING SEQUENTIAL AVAILABILITY & HANDOVER ────────────────────
+function getSewDeptAvailableQty(deptKey, productType) {
+  const meta = getSewDeptMeta().filter(d => d.active !== false);
+  const idx = meta.findIndex(d => d.key === deptKey);
+  if (idx <= 0) {
+    const cutStock = getData('sewingCutStock');
+    const match = cutStock.filter(p => p.type === productType);
+    return match.reduce((a, b) => a + (b.qty || 0), 0);
+  }
+  const prevDeptKey = meta[idx - 1].key;
+  const sewingData = getData('sewing');
+  const prevCompleted = sewingData
+    .filter(r => (r.dept === prevDeptKey || (!r.dept && prevDeptKey === meta[0].key)) && r.type === productType)
+    .reduce((a, r) => a + (r.qty || 0), 0);
+  const currentProcessed = sewingData
+    .filter(r => r.dept === deptKey && r.type === productType)
+    .reduce((a, r) => a + (r.qty || 0) + (r.dmgQty || 0), 0);
+  return Math.max(0, prevCompleted - currentProcessed);
+}
+
 function sewTypeOptionsForDept(deptKey, selected) {
   const firstDeptKey = getFirstSewDeptKey();
   if (deptKey === firstDeptKey) {
-    const cutStock = getData('sewingCutStock').filter(p => p.qty > 0);
-    if (!cutStock.length) return `<option value="">— ${lang==='am'?'ከቆረጣ የደረሰ ምንም የለም':'Nothing received from Cutting yet'} —</option>`;
+    const cutStock = getData('sewingCutStock');
+    const map = {};
+    cutStock.forEach(p => { if ((p.qty || 0) > 0) map[p.type] = (map[p.type] || 0) + p.qty; });
+    const types = Object.keys(map);
+    if (!types.length) return `<option value="">— ${lang==='am'?'ከቆረጣ የደረሰ ምንም የለም':'Nothing received from Cutting yet'} —</option>`;
     return `<option value="">— ${lang==='am'?'ምረጥ':'Select'} —</option>` +
-      cutStock.map(p => `<option value="${p.type}" ${p.type===selected?'selected':''}>${p.type} (${lang==='am'?'ዝግጁ':'ready'}: ${p.qty})</option>`).join('');
+      types.map(t => `<option value="${t}" ${t===selected?'selected':''}>${t} (${lang==='am'?'ዝግጁ':'ready'}: ${map[t]})</option>`).join('');
   } else {
-    // Packaging or subsequent sewing stages: ONLY show items that entered Overlock (first stage) with remaining available quantity
-    const sewingData = getData('sewing');
-    const overlockTypes = {};
-    sewingData.filter(r => r.dept === firstDeptKey).forEach(r => {
-      overlockTypes[r.type] = (overlockTypes[r.type] || 0) + (r.qty || 0);
-    });
+    const meta = getSewDeptMeta().filter(d => d.active !== false);
+    const idx = meta.findIndex(d => d.key === deptKey);
+    const prevDept = idx > 0 ? meta[idx - 1] : null;
+    const prevLabel = prevDept ? prevDept.label : '';
+
+    const prices = getData('productPrices');
     const availItems = [];
-    Object.entries(overlockTypes).forEach(([type, totalEntered]) => {
-      const totalProcessed = sewingData.filter(r => r.type === type && r.dept === deptKey).reduce((a, r) => a + (r.qty || 0), 0);
-      const rem = totalEntered - totalProcessed;
-      if (rem > 0 || type === selected) {
-        availItems.push({ type, rem: Math.max(0, rem) });
+    prices.forEach(p => {
+      const avail = getSewDeptAvailableQty(deptKey, p.type);
+      if (avail > 0 || p.type === selected) {
+        availItems.push({ type: p.type, avail });
       }
     });
+
     if (!availItems.length) {
-      return `<option value="">— ${lang==='am'?'በኦቨርሎክ የተጠናቀቀ አልባሳት የለም':'No overlock-completed items available'} —</option>`;
+      return `<option value="">— ${lang==='am'?`ከ${prevLabel} የተጠናቀቀ አልባሳት የለም`:`No items ready from ${prevLabel}`} —</option>`;
     }
     return `<option value="">— ${lang==='am'?'ምረጥ':'Select'} —</option>` +
-      availItems.map(p => `<option value="${p.type}" ${p.type===selected?'selected':''}>${p.type} (${lang==='am'?'በኦቨርሎክ ያለ':'overlock ready'}: ${p.rem})</option>`).join('');
+      availItems.map(p => `<option value="${p.type}" ${p.type===selected?'selected':''}>${p.type} (${lang==='am'?'ዝግጁ':'ready'}: ${p.avail})</option>`).join('');
+  }
+}
+
+function handleSewTypeChange() {
+  const deptSel = document.getElementById('sewDept');
+  const typeSel = document.getElementById('sewType');
+  const noticeEl = document.getElementById('sewStageAvailNotice');
+  if (!deptSel || !typeSel || !noticeEl) return;
+
+  const deptKey = deptSel.value || getFirstSewDeptKey();
+  const type = typeSel.value;
+  if (!type) { noticeEl.innerHTML = ''; return; }
+
+  const meta = getSewDeptMeta().filter(d => d.active !== false);
+  const idx = meta.findIndex(d => d.key === deptKey);
+
+  if (idx <= 0) {
+    const avail = getSewDeptAvailableQty(deptKey, type);
+    noticeEl.innerHTML = `<span style="color:#80e080">✂️ ${lang==='am'?'ከቆረጣ የደረሰ ለስፌት ዝግጁ':'Ready from Cutting'}: <b>${avail}</b> pcs</span>`;
+    return;
+  }
+
+  const prevDept = meta[idx - 1];
+  const sewingData = getData('sewing');
+  const prevCompleted = sewingData
+    .filter(r => (r.dept === prevDept.key || (!r.dept && prevDept.key === meta[0].key)) && r.type === type)
+    .reduce((a, r) => a + (r.qty || 0), 0);
+  const avail = getSewDeptAvailableQty(deptKey, type);
+
+  if (avail > 0) {
+    noticeEl.innerHTML = `<span style="color:#80e080">✅ ${prevDept.icon} ከ"${prevDept.label}" የተጠናቀቀ: <b>${prevCompleted}</b> | ለዚህ ደረጃ ዝግጁ: <b>${avail}</b> pcs</span>`;
+  } else {
+    noticeEl.innerHTML = `<span style="color:#FF9090">⛔ ${prevDept.icon} ከ"${prevDept.label}" የተጠናቀቀ የለም ወይም አልቋል (የተጠናቀቀው: ${prevCompleted}፣ ዝግጁ: 0)</span>`;
   }
 }
 
@@ -1927,6 +2294,7 @@ function updateSewTypeSelectForDept() {
   const typeSel = document.getElementById('sewType');
   if (!deptSel || !typeSel || deptSel.value === '__addnew__') return;
   typeSel.innerHTML = sewTypeOptionsForDept(deptSel.value, typeSel.value);
+  handleSewTypeChange();
 }
 
 function canActProcurement() { return !!currentUser && (currentUser.role === 'owner' || currentUser.role === 'procurement'); }
@@ -1978,8 +2346,9 @@ function renderProdPipelineOverview() {
   // 1. Cutting Stats
   const cuttingRaw = getData('cuttingRaw');
   const cutting = getData('cutting');
+  const lastCutDept = getLastCutDeptKey();
   let cutAvailTotal = 0;
-  cutting.forEach(c => {
+  cutting.filter(c => c.dept === lastCutDept || !c.dept).forEach(c => {
     const rem = Math.max(0, (c.qty || 0) - (c.sentQty || 0));
     if (rem > 0) cutAvailTotal += rem;
   });
@@ -2512,7 +2881,13 @@ function renderDashboard() {
   });
 
   const cutting=getData('cutting'), sewing=getData('sewing');
-  const totalCut=cutting.reduce((a,x)=>a+x.qty,0), totalSew=sewing.reduce((a,x)=>a+x.qty,0), totalSold=sales.reduce((a,x)=>a+x.qty,0);
+  const lastCutDept = getLastCutDeptKey();
+  const lastSewDept = getLastSewDeptKey();
+  const completedCut = cutting.filter(x => x.dept === lastCutDept || (!x.dept && lastCutDept === 'bundling'));
+  const totalCut = (completedCut.length ? completedCut : cutting).reduce((a,x)=>a+x.qty,0);
+  const finishedSew = sewing.filter(x => x.dept === lastSewDept);
+  const totalSew = (finishedSew.length ? finishedSew : sewing).reduce((a,x)=>a+x.qty,0);
+  const totalSold=sales.reduce((a,x)=>a+x.qty,0);
   if (flowChartInst) flowChartInst.destroy();
   flowChartInst = new Chart(document.getElementById('flowChart').getContext('2d'),{
     type:'bar',
@@ -2538,6 +2913,99 @@ function renderDashboard() {
   renderOwnerRefundReport('dashRefundReportContainer');
 }
 
+// ── CUTTING STAGE PIPELINE (VISUAL HANDOVER) ────────────────────
+function renderCuttingStagePipeline() {
+  const el = document.getElementById('cuttingStagePipeline');
+  if (!el) return;
+
+  const data = getData('cutting');
+  const meta = getCutDeptMeta().filter(d => d.active !== false);
+  const lastDept = getLastCutDeptKey();
+  const prices = getData('productPrices');
+
+  // Calculate totals per stage
+  const stageStats = meta.map((d, idx) => {
+    const isFirst = idx === 0;
+    const isLast = idx === meta.length - 1;
+    const stageRecs = data.filter(r => r.dept === d.key || (!r.dept && isFirst));
+    const processed = stageRecs.reduce((a, r) => a + (r.qty || 0), 0);
+    const stageDmg = stageRecs.reduce((a, r) => a + (r.dmgQty || 0), 0);
+
+    let queueFromPrev = 0;
+    if (!isFirst) {
+      prices.forEach(p => {
+        queueFromPrev += getCutDeptAvailableQty(d.key, p.type);
+      });
+    }
+
+    return {
+      key: d.key,
+      label: d.label,
+      icon: d.icon,
+      color: d.color || '#C9A84C',
+      processed,
+      stageDmg,
+      queueFromPrev,
+      isFirst,
+      isLast
+    };
+  });
+
+  // Available ready to transfer to sewing
+  let readyForSewing = 0;
+  data.filter(r => (r.dept === lastDept || !r.dept)).forEach(r => {
+    readyForSewing += Math.max(0, (r.qty || 0) - (r.sentQty || 0));
+  });
+
+  el.innerHTML = `
+    <div style="background:linear-gradient(135deg, rgba(20,26,48,0.92) 0%, rgba(10,14,32,0.98) 100%);border:1px solid rgba(201,168,76,0.28);border-radius:12px;padding:12px 16px;margin-bottom:12px;box-shadow:0 6px 18px rgba(0,0,0,0.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:16px">✂️</span>
+          <span style="font-size:12.5px;font-weight:700;color:var(--white);letter-spacing:0.3px">${lang==='am'?'የቆረጣ ክፍል ደረጃዎች ፍሰት (Sequential Handover)':'Cutting Sections Stage Pipeline'}</span>
+        </div>
+        <div style="font-size:11px;color:var(--gold);background:rgba(201,168,76,0.1);padding:3px 8px;border-radius:6px;border:1px solid rgba(201,168,76,0.25)">
+          🔄 ${lang==='am'?'ደረጃ-በደረጃ ርክክብ — አንዱ ሲጠናቀቅ ለቀጣዩ ይተላለፋል':'Delivered sequentially stage-by-stage'}
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:8px;align-items:stretch">
+        ${stageStats.map((st, i) => `
+          <div style="background:rgba(255,255,255,0.03);border:1px solid ${st.color}33;border-radius:9px;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:11px;font-weight:700;color:${st.color}">${st.icon} ${st.label.split(' ')[0]}</span>
+              <span style="font-size:9px;color:rgba(197,203,216,0.4);font-weight:700">ደረጃ ${i+1}</span>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px">
+              <span style="font-size:20px;font-weight:800;color:${st.color}">${st.processed}</span>
+              <span style="font-size:10px;color:var(--white-dim)">${lang==='am'?'የተጠናቀቀ':'pcs done'}</span>
+            </div>
+            <div style="font-size:10px;color:var(--white-dim);border-top:1px solid rgba(255,255,255,0.06);padding-top:4px;display:flex;justify-content:space-between">
+              ${!st.isFirst ? `<span>⏳ ለስራ ዝግጁ: <b style="color:#80e080">${st.queueFromPrev}</b></span>` : `<span>🧵 ከጨርቅ ክምችት</span>`}
+              ${st.stageDmg > 0 ? `<span style="color:#FF9090">⚠️ ${st.stageDmg}</span>` : ''}
+            </div>
+          </div>
+        `).join('')}
+
+        <!-- Ready for Sewing card -->
+        <div style="background:rgba(76,175,80,0.06);border:1px solid rgba(76,175,80,0.3);border-radius:9px;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:700;color:#80e080">🪡 ${lang==='am'?'ወደ ስፌት ዝግጁ':'Ready for Sewing'}</span>
+            <span style="font-size:9px;color:#80e080;font-weight:700">መጨረሻ</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px">
+            <span style="font-size:20px;font-weight:800;color:#80e080">${readyForSewing}</span>
+            <span style="font-size:10px;color:var(--white-dim)">${lang==='am'?'ቁራጭ':'pcs'}</span>
+          </div>
+          <div style="font-size:10px;color:var(--white-dim);border-top:1px solid rgba(255,255,255,0.06);padding-top:4px">
+            ${readyForSewing > 0 ? `<span style="color:#80e080">✓ ማሰር የተጠናቀቀ ወደ ስፌት ይላካል</span>` : `<span>ምንም ቀሪ የለም</span>`}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 // ── CUTTING ────────────────────────────────────────────────────
 function renderCutting() {
   const data       = getData('cutting');
@@ -2546,6 +3014,8 @@ function renderCutting() {
   const today    = new Date().toISOString().slice(0,10);
   const weekAgo  = new Date(Date.now() -  6*86400000).toISOString().slice(0,10);
   const monthAgo = new Date(Date.now() - 29*86400000).toISOString().slice(0,10);
+  const lastDept = getLastCutDeptKey();
+  const allCutDepts = getAllCutDepts();
   const sum = arr => arr.reduce((a,r)=>a+(r.qty||0),0);
   const tBreak = arr => {
     const m={}; arr.forEach(r=>{m[r.type]=(m[r.type]||0)+(r.qty||0);});
@@ -2584,27 +3054,31 @@ function renderCutting() {
       </div>` : '';
   }
 
-  // ── 2. Stats + bar chart ──
+  // ── 1b. Stage Pipeline Visualizer ──
+  renderCuttingStagePipeline();
+
+  // ── 2. Stats + bar chart (computed on final completed stage to avoid double counting) ──
   const statsEl = document.getElementById('cuttingStats');
   if (statsEl) {
     const days7 = [...Array(7)].map((_,i)=>{
       const d=new Date(Date.now()-(6-i)*86400000);
       return {date:d.toISOString().slice(0,10),label:['እሁድ','ሰኞ','ማክሰ','ረቡዕ','ሐሙስ','አርብ','ቅዳሜ'][d.getDay()]};
     });
-    const maxDay=Math.max(...days7.map(({date})=>sum(data.filter(r=>r.date===date))),1);
-    const todayQ=sum(data.filter(r=>r.date===today));
-    const weekQ =sum(data.filter(r=>r.date>=weekAgo));
-    const monthQ=sum(data.filter(r=>r.date>=monthAgo));
-    const dmgQ  =dmg.reduce((a,d)=>a+(d.qty||0),0);
+    const completedData = data.filter(r => r.dept === lastDept || !r.dept);
+    const maxDay=Math.max(...days7.map(({date})=>sum(completedData.filter(r=>r.date===date))),1);
+    const todayQ=sum(completedData.filter(r=>r.date===today));
+    const weekQ =sum(completedData.filter(r=>r.date>=weekAgo));
+    const monthQ=sum(completedData.filter(r=>r.date>=monthAgo));
+    const dmgQ  =dmg.reduce((a,d)=>a+(d.qty||0),0) + data.reduce((a,r)=>a+(r.dmgQty||0),0);
 
     statsEl.innerHTML = `
       <div style="padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:10px;margin-bottom:12px">
         <!-- KPI row -->
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
           ${[
-            {icon:'📅',val:todayQ, label:lang==='am'?'ዛሬ':'Today',     sub:tBreak(data.filter(r=>r.date===today))},
-            {icon:'📆',val:weekQ,  label:lang==='am'?'ሳምንት':'Week',    sub:tBreak(data.filter(r=>r.date>=weekAgo)), color:'#4FC3F7'},
-            {icon:'🗓️',val:monthQ, label:lang==='am'?'ወር':'Month',     sub:tBreak(data.filter(r=>r.date>=monthAgo)),color:'var(--gold)'},
+            {icon:'📅',val:todayQ, label:lang==='am'?'ዛሬ የተጠናቀቀ':'Today Finished', sub:tBreak(completedData.filter(r=>r.date===today))},
+            {icon:'📆',val:weekQ,  label:lang==='am'?'ሳምንት (7 ቀን)':'Week Finished',  sub:tBreak(completedData.filter(r=>r.date>=weekAgo)), color:'#4FC3F7'},
+            {icon:'🗓️',val:monthQ, label:lang==='am'?'ወር የተጠናቀቀ':'Month Finished', sub:tBreak(completedData.filter(r=>r.date>=monthAgo)),color:'var(--gold)'},
             {icon:'⚠️',val:dmgQ.toFixed(1),label:lang==='am'?'ዳሜጅ':'Damage',sub:'',color:'#FF9090'},
           ].map(k=>`
             <div style="text-align:center;padding:8px 4px;background:rgba(255,255,255,0.02);border-radius:8px">
@@ -2617,7 +3091,7 @@ function renderCutting() {
         <!-- 7-day bars -->
         <div style="display:flex;gap:4px;align-items:flex-end;height:52px">
           ${days7.map(({date,label})=>{
-            const q=sum(data.filter(r=>r.date===date));
+            const q=sum(completedData.filter(r=>r.date===date));
             const pct=Math.max(Math.round((q/maxDay)*100),q>0?8:2);
             const isT=date===today;
             return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px">
@@ -2636,20 +3110,26 @@ function renderCutting() {
   renderCuttingFabricReport();
 
   // ── 4. Cutting history ──
-  const h=lang==='am'?['ቀን','አይነት','ብዛት','ጨርቅ','ፍጆታ','ሰራተኛ','ማስ.','→ ስፌት','ስረዝ']:['Date','Type','Qty','Fabric','Used','By','Note','→ Sewing','Del'];
+  const h=lang==='am'?['ቀን','ሴክሽን','አይነት','ብዛት','ዳሜጅ','ጨርቅ','ፍጆታ','ሰራተኛ','ማስ.','→ ስፌት','ስረዝ']:['Date','Section','Type','Qty','Dmg','Fabric','Used','By','Note','→ Sewing','Del'];
   document.getElementById('cuttingThead').innerHTML=`<tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>`;
   document.getElementById('cuttingTbody').innerHTML = data.length
     ? [...data].sort((a,b)=>b.date.localeCompare(a.date)).map(r=>{
+        const isFinal = (r.dept === lastDept || !r.dept);
         const remaining = r.qty - (r.sentQty||0);
-        const sendCell = remaining > 0
-          ? (canActCutting()
-              ? `<button onclick="openCutToSewingModal('${r.id}')" style="padding:4px 10px;font-size:11px;font-weight:700;font-family:inherit;border-radius:7px;border:1px solid rgba(201,168,76,0.4);background:rgba(201,168,76,0.12);color:var(--gold);cursor:pointer;white-space:nowrap">📤 ${lang==='am'?'ወደ ስፌት':'To Sewing'} (${remaining})</button>`
-              : `<span style="font-size:10px;color:rgba(197,203,216,0.4)">${remaining} ${lang==='am'?'ይቀራል':'left'}</span>`)
-          : `<span style="font-size:10px;color:#80e080">✅ ${lang==='am'?'ተልኳል':'Sent'}</span>`;
+        const sendCell = isFinal
+          ? (remaining > 0
+              ? (canActCutting()
+                  ? `<button onclick="openCutToSewingModal('${r.id}')" style="padding:4px 10px;font-size:11px;font-weight:700;font-family:inherit;border-radius:7px;border:1px solid rgba(201,168,76,0.4);background:rgba(201,168,76,0.12);color:var(--gold);cursor:pointer;white-space:nowrap">📤 ${lang==='am'?'ወደ ስፌት':'To Sewing'} (${remaining})</button>`
+                  : `<span style="font-size:10px;color:rgba(197,203,216,0.4)">${remaining} ${lang==='am'?'ይቀራል':'left'}</span>`)
+              : `<span style="font-size:10px;color:#80e080">✅ ${lang==='am'?'ተልኳል':'Sent'}</span>`)
+          : `<span style="font-size:10px;color:rgba(197,203,216,0.4)">🔄 ${lang==='am'?'በሂደት ላይ':'In progress'}</span>`;
+        const deptInfo = allCutDepts[r.dept] || { label: r.dept || (lang==='am'?'ማንጣፍ':'Spreading'), icon: '📐', color: '#4FC3F7' };
         return `<tr>
         <td style="white-space:nowrap;color:var(--white-dim)">${r.date}</td>
+        <td style="white-space:nowrap"><span style="font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:6px;background:${deptInfo.color}18;color:${deptInfo.color};border:1px solid ${deptInfo.color}44">${deptInfo.icon} ${deptInfo.label.split(' ')[0]}</span></td>
         <td style="font-weight:600">${r.type}</td>
         <td style="text-align:center;font-weight:700;color:var(--gold)">${r.qty}</td>
+        <td style="text-align:center">${r.dmgQty > 0 ? `<span class="badge badge-damage">${r.dmgQty}</span>` : '—'}</td>
         <td>${r.fabric}</td>
         <td style="text-align:center;color:#4FC3F7">${r.fabricQtyUsed>0?r.fabricQtyUsed:'—'}</td>
         <td style="color:var(--white-dim)">${r.operator||'—'}</td>
@@ -2715,12 +3195,14 @@ function renderCuttingReportTab() {
   const sewing  = getData('sewing');
   const lastDept = getLastSewDeptKey();
 
+  const lastCutDept = getLastCutDeptKey();
+
   // Group cutting records by (type, fabric)
   const byKey = {};
   cutting.forEach(r => {
     const key = `${r.type}||${r.fabric}`;
     if (!byKey[key]) byKey[key] = { type:r.type, fabric:r.fabric, qtyCut:0, fabricUsed:0 };
-    byKey[key].qtyCut += (r.qty||0);
+    if (r.dept === lastCutDept || !r.dept) byKey[key].qtyCut += (r.qty||0);
     byKey[key].fabricUsed += (r.fabricQtyUsed||0);
   });
 
@@ -2875,42 +3357,38 @@ function saveSewing() {
   }
   if (!dept || dept === '__addnew__') { toast(lang==='am'?'ሙያ ይምረጡ':'Please select a department','error'); return; }
 
-  const firstDeptKey = getFirstSewDeptKey();
+  const activeDepts = getSewDeptMeta().filter(d => d.active !== false);
+  const deptIdx = activeDepts.findIndex(d => d.key === dept);
 
   // Whichever department is FIRST in the configured sequence is where cut pieces from Cutting
   // actually enter the sewing process — so that's what draws down the "received from Cutting"
   // pool. Later stages work on pieces already in process and don't draw the pool again.
-  if (dept === firstDeptKey) {
+  if (deptIdx <= 0) {
     const pool = getData('sewingCutStock');
-    const stock = pool.find(p => p.type === type);
-    const avail = stock ? stock.qty : 0;
-    if (avail < qty) {
-      toast(lang==='am'?`⛔ ከቆረጣ ክፍል የደረሰው በቂ አይደለም — ${type} ያለው ${avail} ብቻ ነው`:`⛔ Not enough received from Cutting — only ${avail} of ${type} available`,'error');
+    const totalAvail = pool.filter(p => p.type === type).reduce((a,b)=>a+(b.qty||0),0);
+    if (totalAvail < (qty + dmgQty)) {
+      toast(lang==='am'?`⛔ ከቆረጣ ክፍል የደረሰው በቂ አይደለም — ${type} ያለው ${totalAvail} ብቻ ነው (የተጠየቀው: ${qty + dmgQty})`:`⛔ Not enough received from Cutting — only ${totalAvail} of ${type} available`,'error');
       return;
     }
-    stock.qty -= qty;
+    let needed = qty + dmgQty;
+    for (const stock of pool) {
+      if (stock.type === type && (stock.qty || 0) > 0) {
+        const take = Math.min(stock.qty, needed);
+        stock.qty -= take;
+        needed -= take;
+        if (needed <= 0) break;
+      }
+    }
     saveData('sewingCutStock', pool);
   } else {
-    // Validation for subsequent sewing stages (packaging / ማሸግ or intermediate stages)
-    const sewingData = getData('sewing');
-    // Calculate total units of this item type that entered sewing at first stage (overlock)
-    const totalEnteredSewing = sewingData.filter(r => r.type === type && r.dept === firstDeptKey).reduce((a, r) => a + (r.qty || 0), 0);
-    
-    if (totalEnteredSewing <= 0) {
-      toast(lang==='am'
-        ? `⛔ "${type}" ወደ ስፌት ክፍል አልገባም (በኦቨርሎክ አልተመዘገበም)`
-        : `⛔ "${type}" has not entered sewing (not registered in overlock)`, 'error');
-      return;
-    }
+    // Validation for subsequent sewing stages: sequential handover from previous stage!
+    const prevDept = activeDepts[deptIdx - 1];
+    const availForDept = getSewDeptAvailableQty(dept, type);
 
-    // Calculate total units of this item type already processed in this target department (e.g. packaging)
-    const totalProcessedInDept = sewingData.filter(r => r.type === type && r.dept === dept).reduce((a, r) => a + (r.qty || 0), 0);
-    const availForDept = totalEnteredSewing - totalProcessedInDept;
-
-    if (qty > availForDept) {
+    if ((qty + dmgQty) > availForDept) {
       toast(lang==='am'
-        ? `⛔ ወደ ስፌት ክፍል ገብተው ኦቨርሎክ ያልሰራውን ስራ ማሳለፍ አይቻልም (በኦቨርሎክ የተሰራው: ${totalEnteredSewing}፣ ቀደም ሲል የተሰራው/የታሸገው: ${totalProcessedInDept}፣ የሚቀረው: ${Math.max(0, availForDept)})`
-        : `⛔ Cannot process work that has not completed overlock (Overlock total: ${totalEnteredSewing}, Already processed: ${totalProcessedInDept}, Remaining: ${Math.max(0, availForDept)})`, 'error');
+        ? `⛔ ከቀዳሚው ዘርፍ (${prevDept.label}) የተጠናቀቀው በቂ አይደለም — ለዚህ ዘርፍ ያለው ${availForDept} ብቻ ነው (የተጠየቀው: ${qty + dmgQty})`
+        : `⛔ Not enough completed from previous department (${prevDept.label}) — only ${availForDept} available (requested: ${qty + dmgQty})`, 'error');
       return;
     }
   }
@@ -4230,7 +4708,7 @@ function saveRefund() {
   for (let i = 0; i < bs.length; i++) {
     if (bs[i].branch === branch && bs[i].type === product) { bs[i].qty += qty; placed = true; break; }
   }
-  if (!placed) bs.push({ branch, type:product, qty });
+  if (!placed) bs.push({ id: uid(), branch, type:product, qty });
 
   // 2. If exchange, deduct new product from stock
   if (type === 'exchange' && newProduct && newQty > 0) {
@@ -4577,6 +5055,18 @@ function saveSale() {
       }
     }
     saveData('branchStock', bs);
+  } else {
+    // Owner retail sale from store (warehouse)
+    const store = getData('store');
+    let remaining = qty;
+    for (let i = 0; i < store.length && remaining > 0; i++) {
+      if (store[i].type === product) {
+        const deduct = Math.min(store[i].qty, remaining);
+        store[i].qty -= deduct;
+        remaining -= deduct;
+      }
+    }
+    saveData('store', store);
   }
 
   // Auto-register regular customer
@@ -5598,23 +6088,42 @@ function generateReport(category, period) {
     const cutting=getData('cutting').filter(x=>inPeriod(x.date));
     const sewing=getData('sewing').filter(x=>inPeriod(x.date));
     const cuttingDmg=getData('cuttingDamage').filter(x=>inPeriod(x.date));
-    const totalCut=cutting.reduce((a,x)=>a+x.qty,0), totalSew=sewing.reduce((a,x)=>a+x.qty,0);
-    const cutDmg=cuttingDmg.reduce((a,x)=>a+x.qty,0), sewDmg=sewing.reduce((a,x)=>a+(x.dmgQty||0),0);
+    const lastCutDept = getLastCutDeptKey();
+    const lastSewDept = getLastSewDeptKey();
+    const completedCutting = cutting.filter(x => x.dept === lastCutDept || (!x.dept && lastCutDept === 'bundling'));
+    const totalCut = (completedCutting.length ? completedCutting : cutting).reduce((a,x)=>a+x.qty,0);
+    const finishedSewing = sewing.filter(x => x.dept === lastSewDept);
+    const totalSew = (finishedSewing.length ? finishedSewing : sewing).reduce((a,x)=>a+x.qty,0);
+    const cutDmg = cuttingDmg.reduce((a,x)=>a+(x.qty||0),0) + cutting.reduce((a,x)=>a+(x.dmgQty||0),0);
+    const sewDmg = sewing.reduce((a,x)=>a+(x.dmgQty||0),0);
     const storeMap=getStoreStockMap(), totalStock=Object.values(storeMap).reduce((a,b)=>a+b,0);
     const label = lang==='am' ? `📊 ምርት — ${periodLabel} ሪፖርት` : `📊 Production — ${periodLabel} Report`;
+    const allCutMap = getAllCutDepts();
+    const allSewMap = getAllSewDepts();
+    const prodRows = [
+      ...cutting.map(x => ({
+        ...x,
+        deptLabel: allCutMap[x.dept]?.label ? `✂️ ${allCutMap[x.dept].label.split(' ')[0]}` : (lang==='am'?'ቆረጣ':'Cutting')
+      })),
+      ...sewing.map(x => ({
+        ...x,
+        deptLabel: allSewMap[x.dept]?.label ? `${allSewMap[x.dept].icon||'🪡'} ${allSewMap[x.dept].label}` : (lang==='am'?'ስፌት':'Sewing')
+      }))
+    ].sort((a,b)=>b.date.localeCompare(a.date));
+
     html=`<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <h3 class="card-title">${label} — ${todayStr}</h3>
         <button class="btn-gold" onclick="window.print()">&#x1F5A8;&#xFE0F; Print</button>
       </div>
       <div class="dash-kpis">
-        <div class="kpi-card"><div class="kpi-icon">✂️</div><div class="kpi-val">${totalCut}</div><div class="kpi-label">${lang==='am'?'ቆረጣ':'Cut'}</div></div>
-        <div class="kpi-card"><div class="kpi-icon">🪡</div><div class="kpi-val">${totalSew}</div><div class="kpi-label">${lang==='am'?'ስፌት':'Sewn'}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">✂️</div><div class="kpi-val">${totalCut}</div><div class="kpi-label">${lang==='am'?'ቆረጣ (የተጠናቀቀ)':'Cut (Finished)'}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">🪡</div><div class="kpi-val">${totalSew}</div><div class="kpi-label">${lang==='am'?'ስፌት (የተጠናቀቀ)':'Sewn (Finished)'}</div></div>
         <div class="kpi-card"><div class="kpi-icon">📦</div><div class="kpi-val">${totalStock}</div><div class="kpi-label">${lang==='am'?'የአሁኑ ክምችት':'Current Stock'}</div></div>
         <div class="kpi-card" style="border-color:rgba(224,90,90,0.3)"><div class="kpi-icon">⚠️</div><div class="kpi-val" style="color:var(--danger)">${cutDmg+sewDmg}</div><div class="kpi-label">${lang==='am'?'ዳሜጅ':'Damage'}</div></div>
       </div>
-      <table class="data-table" style="margin-top:14px"><thead><tr><th>${lang==='am'?'ቀን':'Date'}</th><th>${lang==='am'?'ክፍል':'Dept'}</th><th>${lang==='am'?'ምርት':'Product'}</th><th>${lang==='am'?'ብዛት':'Qty'}</th></tr></thead>
-      <tbody>${[...cutting.map(x=>({...x,dept:lang==='am'?'ቆረጣ':'Cutting'})),...sewing.map(x=>({...x,dept:lang==='am'?'ስፌት':'Sewing'}))].sort((a,b)=>b.date.localeCompare(a.date)).map(r=>`<tr><td>${r.date}</td><td>${r.dept}</td><td>${r.type||r.product||'—'}</td><td>${r.qty}</td></tr>`).join('')||noDataRow(4)}</tbody></table>
+      <table class="data-table" style="margin-top:14px"><thead><tr><th>${lang==='am'?'ቀን':'Date'}</th><th>${lang==='am'?'ክፍል / ዘርፍ':'Dept / Stage'}</th><th>${lang==='am'?'ምርት':'Product'}</th><th style="text-align:center">${lang==='am'?'ብዛት':'Qty'}</th><th style="text-align:center">${lang==='am'?'ዳሜጅ':'Damage'}</th></tr></thead>
+      <tbody>${prodRows.map(r=>`<tr><td>${r.date}</td><td>${r.deptLabel}</td><td>${r.type||r.product||'—'}</td><td style="text-align:center;font-weight:700">${r.qty}</td><td style="text-align:center">${r.dmgQty>0?`<span class="badge badge-damage">${r.dmgQty}</span>`:'—'}</td></tr>`).join('')||noDataRow(5)}</tbody></table>
     </div>`;
 
   } else if (category==='finance') {
@@ -6895,17 +7404,18 @@ function renderWholesaleReportForOwner() {
 
 
 function cutOpenModal() {
+  const deptSel = document.getElementById('cutDept');
+  const firstDept = getFirstCutDeptKey();
+  if (deptSel) {
+    deptSel.innerHTML = cutDeptOptionsHTML(firstDept);
+    deptSel.value = firstDept;
+  }
   // populate fabric dropdown from cuttingRaw
   const sel = document.getElementById('cutFabric');
-  if (!sel) return;
-  const cuttingRaw = getData('cuttingRaw');
-  sel.innerHTML = '<option value="">— ጨርቅ ምረጥ —</option>' +
-    cuttingRaw.map(r => `<option value="${r.name}" data-qty="${r.qty}" data-unit="${r.unit||''}">${r.name} (${r.qty} ${r.unit||''})</option>`).join('');
-  // populate clothing type dropdown from the owner's price catalog — no free typing, so types stay consistent
-  const typeSel = document.getElementById('cutType');
-  if (typeSel) typeSel.innerHTML = clothingTypeOptionsHTML();
-  if (!getData('productPrices').length) {
-    toast(lang==='am'?'⚠️ መጀመሪያ ኦነሩ የልብስ አይነቶችን በ"የልብስ ዋጋ ቁጥጥር" ገጽ ላይ ማስገባት አለበት':'⚠️ The owner must first add clothing types on the "Price Control" page','error');
+  if (sel) {
+    const cuttingRaw = getData('cuttingRaw');
+    sel.innerHTML = '<option value="">— ጨርቅ ምረጥ —</option>' +
+      cuttingRaw.map(r => `<option value="${r.name}" data-qty="${r.qty}" data-unit="${r.unit||''}">${r.name} (${r.qty} ${r.unit||''})</option>`).join('');
   }
   // set default date
   const d = document.getElementById('cutDate');
@@ -6914,8 +7424,12 @@ function cutOpenModal() {
   ['cutQty','cutFabricQty','cutOperator','cutNote'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  const dmgEl = document.getElementById('cutDmgQty');
+  if (dmgEl) dmgEl.value = '0';
   document.getElementById('cutFabricStock').textContent = '';
   document.getElementById('cutFabricUnit').textContent = '';
+
+  handleCutDeptChange();
   openModal('cuttingModal');
 }
 
@@ -6945,42 +7459,87 @@ function cutUpdateFabricStock() {
 
 function saveCutting() {
   const date     = v('cutDate');
+  const dept     = v('cutDept') || getFirstCutDeptKey();
   const type     = v('cutType');
   const qty      = parseInt(v('cutQty'));
+  const dmgQty   = parseInt(v('cutDmgQty')) || 0;
   const fabric   = v('cutFabric');
   const fabricQty = parseFloat(document.getElementById('cutFabricQty')?.value) || 0;
   const operator = v('cutOperator');
   const note     = v('cutNote');
 
-  if (!date || !type || !qty || !fabric) {
-    toast(lang==='am'?'ሁሉንም ቦታ ሙሉ':'Fill all fields','error'); return;
+  if (!date || !type || !qty) {
+    toast(lang==='am'?'ሁሉንም አስፈላጊ ቦታዎች ሙሉ':'Fill all required fields','error'); return;
   }
   if (!getData('productPrices').some(p => p.type === type)) {
     toast(lang==='am'?'ልብስ አይነት ከዋጋ ዝርዝር ውስጥ መመረጥ አለበት':'Clothing type must be chosen from the price list','error'); return;
   }
 
-  // Check fabric stock
-  const cuttingRaw = getData('cuttingRaw');
-  const fabricStock = cuttingRaw.find(r => r.name === fabric);
+  const firstDeptKey = getFirstCutDeptKey();
+  const activeDepts = getCutDeptMeta().filter(d => d.active !== false);
+  const deptIdx = activeDepts.findIndex(d => d.key === dept);
 
-  if (fabricQty > 0) {
-    if (!fabricStock || fabricStock.qty < fabricQty) {
-      toast(`${fabric}: ${lang==='am'?`ክምችት አልቋል (${fabricStock?.qty||0} ብቻ አለ)`:`Insufficient stock (only ${fabricStock?.qty||0} available)`}`, 'error');
+  if (deptIdx <= 0) {
+    // Stage 1: Spreading / Fabric check
+    if (!fabric) {
+      toast(lang==='am'?'የጨርቅ አይነት ይምረጡ':'Select fabric type','error'); return;
+    }
+    const cuttingRaw = getData('cuttingRaw');
+    const fabricStock = cuttingRaw.find(r => r.name === fabric);
+    if (fabricQty > 0) {
+      if (!fabricStock || fabricStock.qty < fabricQty) {
+        toast(`${fabric}: ${lang==='am'?`ክምችት አልቋል (${fabricStock?.qty||0} ብቻ አለ)`:`Insufficient stock (only ${fabricStock?.qty||0} available)`}`, 'error');
+        return;
+      }
+      fabricStock.qty -= fabricQty;
+      if (fabricStock.qty < 0) fabricStock.qty = 0;
+      saveData('cuttingRaw', cuttingRaw);
+    }
+  } else {
+    // Subsequent stage (Cutting, Bundling): Validate against previous stage!
+    const prevDept = activeDepts[deptIdx - 1];
+    const availForDept = getCutDeptAvailableQty(dept, type);
+    if ((qty + dmgQty) > availForDept) {
+      toast(lang==='am'
+        ? `⛔ ከቀዳሚው ሴክሽን (${prevDept.label}) የተጠናቀቀው በቂ አይደለም — ያለው ${availForDept} ብቻ ነው (የተጠየቀው: ${qty + dmgQty})`
+        : `⛔ Not enough completed from previous section (${prevDept.label}) — only ${availForDept} available`, 'error');
       return;
     }
-    // Deduct fabric from cuttingRaw
-    fabricStock.qty -= fabricQty;
-    if (fabricStock.qty < 0) fabricStock.qty = 0;
-    saveData('cuttingRaw', cuttingRaw);
   }
 
   // Save cutting record
   const data = getData('cutting');
-  data.push({ id:uid(), date, type, qty, fabric, fabricQtyUsed: fabricQty || 0, operator, note });
+  data.push({
+    id: uid(),
+    date,
+    dept,
+    type,
+    qty,
+    dmgQty,
+    fabric: fabric || '—',
+    fabricQtyUsed: fabricQty || 0,
+    operator,
+    note
+  });
   saveData('cutting', data);
+
+  // If damage occurred in cutting, also log to cuttingDamage for tracking
+  if (dmgQty > 0) {
+    const dmgData = getData('cuttingDamage');
+    dmgData.push({
+      id: uid(),
+      date,
+      fabric: fabric || type,
+      qty: dmgQty,
+      unit: 'pcs',
+      reason: `በ${getAllCutDepts()[dept]?.label || dept} ሴክሽን የተበላሸ (${type})`
+    });
+    saveData('cuttingDamage', dmgData);
+  }
+
   closeModal('cuttingModal');
   renderCutting();
-  toast(lang==='am'?`✂️ ${qty} ${type} ተቆርጠዋል${fabricQty?` — ${fabricQty} ${fabricStock?.unit||''} ${fabric} ጥቅም ላይ ዋለ`:''}` : `✂️ ${qty} ${type} cut${fabricQty?` — used ${fabricQty} ${fabricStock?.unit||''} ${fabric}`:''}`);
+  toast(lang==='am'?`✂️ ${qty} ${type} ተመዝግቧል (${getAllCutDepts()[dept]?.label || dept})` : `✂️ ${qty} ${type} recorded`);
 }
 
 // ── CUTTING → SEWING (cut pieces, tracked by type) ──
@@ -6993,11 +7552,13 @@ function openCutToSewingModal(selectedCutId) {
     toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ቆረጣ ክፍል ወይም ኦነር ብቻ ነው':'⛔ Only Cutting staff or Owner can do this','error'); 
     return; 
   }
+  const lastDept = getLastCutDeptKey();
   const data = getData('cutting');
-  const available = data.filter(r => (r.qty - (r.sentQty || 0)) > 0);
+  // ONLY items at final stage (or legacy without dept) can be sent to sewing!
+  const available = data.filter(r => (r.dept === lastDept || !r.dept) && ((r.qty - (r.sentQty || 0)) > 0));
 
   if (!available.length) {
-    toast(lang==='am'?'ወደ ስፌት ክፍል የሚላክ ቀሪ የተቆረጠ አልባሳት የለም — አስቀድመው ቆረጣ ይመዝግቡ':'No cut items available to send to Sewing', 'warning');
+    toast(lang==='am'?'ወደ ስፌት ክፍል የሚላክ ቀሪ የተጠናቀቀ (ማሰር / መለየት) የተቆረጠ አልባሳት የለም':'No finished cut items available to send to Sewing', 'warning');
     return;
   }
 
@@ -8504,7 +9065,95 @@ function sewOpenModal() {
   ['sewNote'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   const q = document.getElementById('sewQty'); if(q) q.value='';
   const dq = document.getElementById('sewDmgQty'); if(dq) dq.value='0';
+  handleSewTypeChange();
   openModal('sewingModal');
+}
+
+// ── SEWING STAGE PIPELINE (VISUAL HANDOVER) ──────────────────────
+function renderSewingStagePipeline() {
+  const el = document.getElementById('sewingStagePipeline');
+  if (!el) return;
+
+  const data = getData('sewing');
+  const meta = getSewDeptMeta().filter(d => d.active !== false);
+  const prices = getData('productPrices');
+  const lastDept = getLastSewDeptKey();
+
+  const stageStats = meta.map((d, idx) => {
+    const isFirst = idx === 0;
+    const isLast = idx === meta.length - 1;
+    const stageRecs = data.filter(r => r.dept === d.key || (!r.dept && isFirst));
+    const processed = stageRecs.reduce((a, r) => a + (r.qty || 0), 0);
+    const stageDmg = stageRecs.reduce((a, r) => a + (r.dmgQty || 0), 0);
+
+    let queueFromPrev = 0;
+    prices.forEach(p => {
+      queueFromPrev += getSewDeptAvailableQty(d.key, p.type);
+    });
+
+    return {
+      key: d.key,
+      label: d.label,
+      icon: d.icon,
+      color: d.color || '#4FC3F7',
+      processed,
+      stageDmg,
+      queueFromPrev,
+      isFirst,
+      isLast
+    };
+  });
+
+  const readyForStoreList = computeSewingReadyToSend();
+  const readyForStore = readyForStoreList.reduce((s, r) => s + (r.qty || 0), 0);
+
+  el.innerHTML = `
+    <div style="background:linear-gradient(135deg, rgba(20,26,48,0.92) 0%, rgba(10,14,32,0.98) 100%);border:1px solid rgba(79,195,247,0.28);border-radius:12px;padding:12px 16px;margin-bottom:12px;box-shadow:0 6px 18px rgba(0,0,0,0.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:16px">🪡</span>
+          <span style="font-size:12.5px;font-weight:700;color:var(--white);letter-spacing:0.3px">${lang==='am'?'የስፌት ዘርፎች ቅደም-ተከተል ፍሰት (Sequential Handover)':'Sewing Sections Stage Pipeline'}</span>
+        </div>
+        <div style="font-size:11px;color:#4FC3F7;background:rgba(79,195,247,0.1);padding:3px 8px;border-radius:6px;border:1px solid rgba(79,195,247,0.25)">
+          🔄 ${lang==='am'?'ደረጃ-በደረጃ ርክክብ — አንዱ ሲያጠናቅቅ ለቀጣዩ ይተላለፋል':'Step-by-step handover between sections'}
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:8px;align-items:stretch">
+        ${stageStats.map((st, i) => `
+          <div style="background:rgba(255,255,255,0.03);border:1px solid ${st.color}33;border-radius:9px;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:11px;font-weight:700;color:${st.color}">${st.icon} ${st.label.split(' ')[0]}</span>
+              <span style="font-size:9px;color:rgba(197,203,216,0.4);font-weight:700">ደረጃ ${i+1}</span>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px">
+              <span style="font-size:20px;font-weight:800;color:${st.color}">${st.processed}</span>
+              <span style="font-size:10px;color:var(--white-dim)">${lang==='am'?'የተሰፋ':'done'}</span>
+            </div>
+            <div style="font-size:10px;color:var(--white-dim);border-top:1px solid rgba(255,255,255,0.06);padding-top:4px;display:flex;justify-content:space-between">
+              <span>⏳ ዝግጁ: <b style="color:#80e080">${st.queueFromPrev}</b></span>
+              ${st.stageDmg > 0 ? `<span style="color:#FF9090">⚠️ ${st.stageDmg}</span>` : ''}
+            </div>
+          </div>
+        `).join('')}
+
+        <!-- Ready for Store card -->
+        <div style="background:rgba(76,175,80,0.06);border:1px solid rgba(76,175,80,0.3);border-radius:9px;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:700;color:#80e080">📦 ${lang==='am'?'ወደ እቃ ቤት ዝግጁ':'Ready for Store'}</span>
+            <span style="font-size:9px;color:#80e080;font-weight:700">መጨረሻ</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px">
+            <span style="font-size:20px;font-weight:800;color:#80e080">${readyForStore}</span>
+            <span style="font-size:10px;color:var(--white-dim)">${lang==='am'?'ቁራጭ':'pcs'}</span>
+          </div>
+          <div style="font-size:10px;color:var(--white-dim);border-top:1px solid rgba(255,255,255,0.06);padding-top:4px">
+            ${readyForStore > 0 ? `<span style="color:#80e080">✓ የተጠናቀቀ ወደ እቃ ቤት ይላካል</span>` : `<span>ምንም ቀሪ የለም</span>`}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // ── Updated renderSewing ──
@@ -8548,11 +9197,15 @@ function renderSewing() {
       </div>` : `<div style="text-align:center;color:var(--white-dim);padding:16px;font-size:12px">${lang==='am'?`ገና ምንም የተጠናቀቀ ምርት የለም — ${getAllSewDepts()[getLastSewDeptKey()]?.label||getLastSewDeptKey()} ዘርፍ ላይ ይመዝገብ`:`No finished products yet — register them under ${getAllSewDepts()[getLastSewDeptKey()]?.label||getLastSewDeptKey()}`}</div>`;
   }
 
+  // ── 1d. Stage Pipeline Visualizer ──
+  renderSewingStagePipeline();
+
   const data    = getData('sewing');
   const workers = getData('sewingWorkers');
   const today   = new Date().toISOString().slice(0,10);
   const weekAgo = new Date(Date.now() -  6*86400000).toISOString().slice(0,10);
   const monthAgo= new Date(Date.now() - 29*86400000).toISOString().slice(0,10);
+  const lastDept = getLastSewDeptKey();
   const sum = arr => arr.reduce((a,r)=>a+(r.qty||0),0);
   const dmgSum = arr => arr.reduce((a,r)=>a+(r.dmgQty||0),0);
 
@@ -8563,7 +9216,8 @@ function renderSewing() {
       const d=new Date(Date.now()-(6-i)*86400000);
       return { date:d.toISOString().slice(0,10), label:['እሁድ','ሰኞ','ማክሰ','ረቡዕ','ሐሙስ','አርብ','ቅዳሜ'][d.getDay()] };
     });
-    const maxDay=Math.max(...days7.map(({date})=>sum(data.filter(r=>r.date===date))),1);
+    const finishedData = data.filter(r=>r.dept===lastDept);
+    const maxDay=Math.max(...days7.map(({date})=>sum((finishedData.length?finishedData:data).filter(r=>r.date===date))),1);
 
     // Dept stats: today + week for each dept (built-in + any custom ones added by the sewing head / owner)
     const allDepts = getAllSewDepts();
@@ -8578,15 +9232,19 @@ function renderSewing() {
     // Dept colors for stacked bars
     const deptColors = {}; Object.keys(allDepts).forEach(k => deptColors[k] = getSewDeptColor(k));
 
+    const todayFinished = sum(data.filter(r=>r.dept===lastDept && r.date===today));
+    const weekFinished  = sum(data.filter(r=>r.dept===lastDept && r.date>=weekAgo));
+    const monthFinished = sum(data.filter(r=>r.dept===lastDept && r.date>=monthAgo));
+
     statsEl.innerHTML = `
       <div style="padding:14px 16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;margin-bottom:12px">
 
-        <!-- Top KPI totals -->
+        <!-- Top KPI totals (Accurate finished outputs) -->
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
           ${[
-            {icon:'📅',val:sum(data.filter(r=>r.date===today)),     label:lang==='am'?'ዛሬ ጠቅ':'Today Total'},
-            {icon:'📆',val:sum(data.filter(r=>r.date>=weekAgo)),    label:lang==='am'?'ሳምን ጠቅ':'Week Total',  color:'#4FC3F7'},
-            {icon:'🗓️',val:sum(data.filter(r=>r.date>=monthAgo)),   label:lang==='am'?'ወር ጠቅ':'Month Total',  color:'var(--gold)'},
+            {icon:'📅',val:todayFinished, label:lang==='am'?'ዛሬ የተጠናቀቀ':'Today Finished'},
+            {icon:'📆',val:weekFinished,  label:lang==='am'?'ሳምንት (የተጠናቀቀ)':'Week Finished',  color:'#4FC3F7'},
+            {icon:'🗓️',val:monthFinished, label:lang==='am'?'ወር (የተጠናቀቀ)':'Month Finished',  color:'var(--gold)'},
             {icon:'⚠️',val:dmgSum(data.filter(r=>r.date>=weekAgo)), label:lang==='am'?'ዳሜጅ (ሳምን)':'Dmg (wk)', color:'#FF9090'},
           ].map(k=>`<div style="text-align:center;padding:8px 4px;background:rgba(255,255,255,0.03);border-radius:8px">
             <div style="font-size:12px">${k.icon}</div>
