@@ -140,7 +140,31 @@ function saveData(key, val, deletedId, deletedIds) {
   localStorage.setItem('a2_' + key, JSON.stringify(val));
   if (key !== 'users') syncToServer(key, val, delIds.length === 1 ? delIds[0] : null, delIds);
 }
-function getData(key) { return loadData(key, []); }
+function getDismissedTransferIds() {
+  try {
+    const list = JSON.parse(localStorage.getItem('a2_dismissedTransfers') || '[]');
+    return new Set(Array.isArray(list) ? list.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function markTransferDismissed(id) {
+  if (!id) return;
+  const set = getDismissedTransferIds();
+  set.add(String(id));
+  const arr = Array.from(set).slice(-500);
+  localStorage.setItem('a2_dismissedTransfers', JSON.stringify(arr));
+}
+
+function getData(key) {
+  const data = loadData(key, []);
+  if (key === 'pendingTransfers' && Array.isArray(data)) {
+    const dismissed = getDismissedTransferIds();
+    if (dismissed.size) return data.filter(p => p && p.id && !dismissed.has(String(p.id)));
+  }
+  return data;
+}
 
 // ── SANITIZE & DEDUPLICATE SYSTEM ARRAYS (removes double counting / phantom stock) ──
 function sanitizeAllData() {
@@ -264,6 +288,46 @@ function sanitizeAllData() {
     if (prunedIds.length) {
       localStorage.setItem('a2_expenses', JSON.stringify(cleanExp));
       syncToServer('expenses', cleanExp, null, prunedIds);
+      changed = true;
+    }
+  }
+
+  // 6. Deduplicate duplicate transfer sales caused by repeated button clicks
+  const allSales = loadData('sales', []);
+  if (Array.isArray(allSales) && allSales.length) {
+    const seen = new Set();
+    const cleanSales = [];
+    const prunedSaleIds = [];
+    allSales.forEach(s => {
+      if (!s) return;
+      if (s.payment === 'transfer') {
+        const sig = s.transferId
+          ? 'trId:' + s.transferId + ':' + (s.product || '')
+          : 'trSig:' + (s.branch || '') + ':' + (s.date || '') + ':' + (s.product || '') + ':' + (s.qty || '') + ':' + (s.price || '') + ':' + (s.transferVia || '') + ':' + (s.customerName || s.creditCustomer || '');
+        if (seen.has(sig)) {
+          if (s.id) prunedSaleIds.push(s.id);
+          return;
+        }
+        seen.add(sig);
+      }
+      cleanSales.push(s);
+    });
+    if (prunedSaleIds.length) {
+      localStorage.setItem('a2_sales', JSON.stringify(cleanSales));
+      syncToServer('sales', cleanSales, null, prunedSaleIds);
+      changed = true;
+    }
+  }
+
+  // 7. Purge dismissed/completed transfers from pendingTransfers
+  const pt = loadData('pendingTransfers', []);
+  const dismissedSet = getDismissedTransferIds();
+  if (Array.isArray(pt) && pt.length && dismissedSet.size) {
+    const cleanPt = pt.filter(p => p && p.id && !dismissedSet.has(String(p.id)));
+    if (cleanPt.length !== pt.length) {
+      const removedIds = pt.filter(p => p && p.id && dismissedSet.has(String(p.id))).map(p => p.id);
+      localStorage.setItem('a2_pendingTransfers', JSON.stringify(cleanPt));
+      syncToServer('pendingTransfers', cleanPt, null, removedIds);
       changed = true;
     }
   }
@@ -4356,7 +4420,7 @@ function renderSalesReport() {
               </div>
               <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
                 <span style="font-size:13px;font-weight:700;color:#80e080">${fmtMoney(p.total)}</span>
-                <button onclick="staffDismissApproved('${p.id}')"
+                <button onclick="staffDismissApproved('${p.id}', this)"
                   style="padding:4px 10px;border-radius:7px;border:1px solid rgba(76,175,80,0.4);background:rgba(76,175,80,0.12);color:#80e080;cursor:pointer;font-family:inherit;font-size:11px;font-weight:600">
                   📦 ${lang==='am'?'ተቀብያለሁ ✓':'Received ✓'}
                 </button>
@@ -6446,7 +6510,11 @@ function rejectDelete(pendingId) {
 
 function approvePendingTransfer(pendingId) {
   const pending = getData('pendingTransfers');
-  const req = pending.find(p => p.id === pendingId); if (!req) return;
+  const req = pending.find(p => p.id === pendingId);
+  if (!req) return;
+  // If already approved, do not deduct stock or approve again!
+  if (req.status === 'approved') return;
+
   // The sale is only truly completed once the owner approves the transfer —
   // so stock is deducted right here, at approval time.
   const bs = getData('branchStock');
@@ -6470,37 +6538,70 @@ function approvePendingTransfer(pendingId) {
 }
 
 function rejectPendingTransfer(pendingId) {
+  markTransferDismissed(pendingId);
   const pending = getData('pendingTransfers');
-  saveData('pendingTransfers', pending.filter(p => p.id !== pendingId));
+  saveData('pendingTransfers', pending.filter(p => p.id !== pendingId), pendingId, [pendingId]);
   buildSidebar();
   renderDashboard();
   toast(lang==='am'?'❌ ትራንስፈር ውድቅ ሆኗል':'❌ Transfer rejected', 'error');
 }
 
-function staffDismissApproved(pendingId) {
-  const pending = getData('pendingTransfers');
-  const req = pending.find(p => p.id === pendingId); if (!req) return;
+function staffDismissApproved(pendingId, btnEl) {
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.style.opacity = '0.5';
+    btnEl.textContent = '⏳ ...';
+  }
 
-  // Stock was already deducted when the sale was made — just record the confirmed sale now.
+  // Check if this transfer was already dismissed in local storage to prevent duplicate clicks
+  const dismissedSet = getDismissedTransferIds();
+  if (dismissedSet.has(String(pendingId))) {
+    renderPOS();
+    return;
+  }
+  markTransferDismissed(pendingId);
+
+  const pending = getData('pendingTransfers');
+  const req = pending.find(p => p.id === pendingId);
+  if (!req) {
+    renderPOS();
+    return;
+  }
+
+  // Stock was already deducted when the sale was approved by owner.
+  // Record the confirmed sale in sales table ONCE only (idempotent):
   const sales = getData('sales');
-  const date = req.date;
+  const date = req.date || new Date().toISOString().slice(0, 10);
   const branch = req.branch;
 
-  (req.items || []).forEach(item => {
-    sales.push({
-      id: uid(), date, product: item.product, qty: item.qty, price: item.price,
-      payment: req.transferVia ? 'transfer' : 'cash',
-      transferVia: req.transferVia || '',
-      creditCustomer: req.customerName || req.creditCustomer || '',
-      branch, note: req.note || '', by: req.by
+  const alreadyInSales = sales.some(s => s.transferId === pendingId);
+  if (!alreadyInSales) {
+    (req.items || []).forEach(item => {
+      sales.push({
+        id: uid(),
+        transferId: req.id,
+        date,
+        product: item.product,
+        qty: item.qty,
+        price: item.price,
+        payment: 'transfer',
+        transferVia: req.transferVia || '',
+        creditCustomer: req.customerName || req.creditCustomer || '',
+        customerName: req.customerName || '',
+        branch,
+        note: req.note || '',
+        by: req.by || currentUser.username
+      });
     });
-  });
+    saveData('sales', sales);
+  }
 
-  saveData('sales', sales);
+  // Remove this transfer from pending list and pass deletedId explicitly to server
+  const updatedPending = pending.filter(p => p.id !== pendingId);
+  saveData('pendingTransfers', updatedPending, pendingId, [pendingId]);
 
-  // Remove this transfer from pending list
-  saveData('pendingTransfers', pending.filter(p => p.id !== pendingId));
   buildSidebar();
+  renderPOS();
   renderSalesReport();
   if (typeof renderSales === 'function') renderSales();
   toast(lang === 'am' ? '✔ ዕቃ ተቀብሎ ለደንበኛ ተሰጠ' : '✔ Received & handed to customer');

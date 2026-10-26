@@ -243,6 +243,18 @@ app.post('/api/sync/:key', async (req, res) => {
       if (deletedId) delSet.add(String(deletedId));
       if (Array.isArray(deletedIds)) deletedIds.forEach(id => delSet.add(String(id)));
 
+      // Maintain persistent tombstone set for dismissed transfers so they can never be resurrected
+      let dismissedSet = new Set();
+      if (key === 'pendingTransfers') {
+        const storedDismissed = (await db.getKey('dismissedTransferIds')) || [];
+        dismissedSet = new Set(Array.isArray(storedDismissed) ? storedDismissed.map(String) : []);
+        delSet.forEach(id => dismissedSet.add(String(id)));
+        oldValue.forEach(item => {
+          if (item && item.dismissed && item.id) dismissedSet.add(String(item.id));
+        });
+        await db.setKey('dismissedTransferIds', Array.from(dismissedSet).slice(-1000));
+      }
+
       const getItemKey = item => {
         if (!item || typeof item !== 'object') return null;
         if (key === 'branchStock' && item.branch && item.type) return 'bs:' + item.branch + ':' + item.type;
@@ -262,7 +274,7 @@ app.post('/api/sync/:key', async (req, res) => {
       // First, seed with items from oldValue (persisted server state)
       oldValue.forEach(item => {
         const itemId = item && (item.id !== undefined ? String(item.id) : (item._id !== undefined ? String(item._id) : null));
-        if (itemId && delSet.has(itemId)) return;
+        if (itemId && (delSet.has(itemId) || dismissedSet.has(itemId))) return;
         const k = getItemKey(item);
         if (k) map.set(k, item);
       });
@@ -270,13 +282,33 @@ app.post('/api/sync/:key', async (req, res) => {
       // Next, overlay with all items from incoming client value (updates and new additions)
       value.forEach(item => {
         const itemId = item && (item.id !== undefined ? String(item.id) : (item._id !== undefined ? String(item._id) : null));
-        if (itemId && delSet.has(itemId)) return;
+        if (itemId && (delSet.has(itemId) || dismissedSet.has(itemId))) return;
         const k = getItemKey(item);
-        if (k) map.set(k, item);
+        if (k) {
+          const existing = map.get(k);
+          if (existing && existing.status && item.status) {
+            // CRITICAL STATUS PROTECTION:
+            // Once an owner has approved or rejected a record on server,
+            // an incoming stale client item with 'pending' status can NEVER revert it!
+            if ((existing.status === 'approved' || existing.status === 'rejected') && item.status === 'pending') {
+              item = {
+                ...item,
+                status: existing.status,
+                approvedAt: existing.approvedAt || item.approvedAt,
+                approvedBy: existing.approvedBy || item.approvedBy
+              };
+            }
+          }
+          map.set(k, item);
+        }
       });
 
-      // Ensure explicitly deleted IDs are removed
+      // Ensure explicitly deleted and dismissed IDs are removed
       delSet.forEach(delId => {
+        map.delete('id:' + delId);
+        map.delete(String(delId));
+      });
+      dismissedSet.forEach(delId => {
         map.delete('id:' + delId);
         map.delete(String(delId));
       });
@@ -290,6 +322,20 @@ app.post('/api/sync/:key', async (req, res) => {
           if (!e || !e.procOrderId) return true;
           if (seenProcOrders.has(e.procOrderId)) return false;
           seenProcOrders.add(e.procOrderId);
+          return true;
+        });
+      }
+
+      // Special deduplication for transfer sales (prevent accidental duplicate records from repeated clicks)
+      if (key === 'sales') {
+        const seenTransfers = new Set();
+        merged = merged.filter(s => {
+          if (!s || s.payment !== 'transfer') return true;
+          const sig = s.transferId
+            ? 'trId:' + s.transferId + ':' + (s.product || '')
+            : 'trSig:' + (s.branch || '') + ':' + (s.date || '') + ':' + (s.product || '') + ':' + (s.qty || '') + ':' + (s.price || '') + ':' + (s.transferVia || '') + ':' + (s.customerName || s.creditCustomer || '');
+          if (seenTransfers.has(sig)) return false;
+          seenTransfers.add(sig);
           return true;
         });
       }
