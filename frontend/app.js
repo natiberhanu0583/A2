@@ -153,13 +153,13 @@ function sanitizeAllData() {
     let dupFound = false;
     bs.forEach(item => {
       if (!item || !item.branch || !item.type) return;
-      const k = item.branch + '::' + item.type;
+      const k = String(item.branch).trim() + '::' + String(item.type).trim();
       if (map.has(k)) {
         dupFound = true;
         const ex = map.get(k);
-        ex.qty = (ex.qty || 0) + (item.qty || 0);
+        ex.qty = Math.max(0, (Number(ex.qty) || 0) + (Number(item.qty) || 0));
       } else {
-        map.set(k, { id: item.id || uid(), branch: item.branch, type: item.type, qty: Math.max(0, item.qty || 0) });
+        map.set(k, { id: item.id || uid(), branch: item.branch, type: item.type, qty: Math.max(0, Number(item.qty) || 0) });
       }
     });
     if (dupFound || map.size !== bs.length) {
@@ -177,13 +177,13 @@ function sanitizeAllData() {
     let dupFound = false;
     scs.forEach(item => {
       if (!item || !item.type) return;
-      const k = item.type;
+      const k = String(item.type).trim();
       if (map.has(k)) {
         dupFound = true;
         const ex = map.get(k);
-        ex.qty = (ex.qty || 0) + (item.qty || 0);
+        ex.qty = Math.max(0, (Number(ex.qty) || 0) + (Number(item.qty) || 0));
       } else {
-        map.set(k, { id: item.id || uid(), type: item.type, qty: Math.max(0, item.qty || 0) });
+        map.set(k, { id: item.id || uid(), type: item.type, qty: Math.max(0, Number(item.qty) || 0) });
       }
     });
     if (dupFound || map.size !== scs.length) {
@@ -201,14 +201,14 @@ function sanitizeAllData() {
     let dupFound = false;
     cr.forEach(item => {
       if (!item || !item.name) return;
-      const k = item.name;
+      const k = String(item.name).trim();
       if (map.has(k)) {
         dupFound = true;
         const ex = map.get(k);
-        ex.qty = (ex.qty || 0) + (item.qty || 0);
+        ex.qty = Math.max(0, (Number(ex.qty) || 0) + (Number(item.qty) || 0));
         if (item.unit) ex.unit = item.unit;
       } else {
-        map.set(k, { id: item.id || uid(), name: item.name, qty: Math.max(0, item.qty || 0), unit: item.unit || '' });
+        map.set(k, { id: item.id || uid(), name: item.name, qty: Math.max(0, Number(item.qty) || 0), unit: item.unit || '' });
       }
     });
     if (dupFound || map.size !== cr.length) {
@@ -226,14 +226,14 @@ function sanitizeAllData() {
     let dupFound = false;
     rs.forEach(item => {
       if (!item || !item.name) return;
-      const k = item.name;
+      const k = String(item.name).trim();
       if (map.has(k)) {
         dupFound = true;
         const ex = map.get(k);
-        ex.qty = (ex.qty || 0) + (item.qty || 0);
+        ex.qty = Math.max(0, (Number(ex.qty) || 0) + (Number(item.qty) || 0));
         if (item.unit) ex.unit = item.unit;
       } else {
-        map.set(k, { id: item.id || uid(), name: item.name, qty: Math.max(0, item.qty || 0), unit: item.unit || '' });
+        map.set(k, { id: item.id || uid(), name: item.name, qty: Math.max(0, Number(item.qty) || 0), unit: item.unit || '' });
       }
     });
     if (dupFound || map.size !== rs.length) {
@@ -1961,13 +1961,22 @@ function getStoreStockMap() {
   const store = getData('store');
   const transfers = getData('storeTransfers');
   const m = {};
-  // Sum all store entries (original receipts — never mutated)
-  store.forEach(r => { m[r.type] = (m[r.type]||0) + (r.qty||0); });
-  // Deduct transfers that are in-transit (pending_owner or pending_receiver) or confirmed
-  // i.e. any transfer that has left the store
+  // Sum all store entries (remaining available in warehouse shelves)
+  store.forEach(r => {
+    const t = (r.type || '').trim();
+    if (t) m[t] = (m[t] || 0) + (Number(r.qty) || 0);
+  });
+  // Deduct transfers that are in-transit (pending_owner or pending_receiver)
+  // or unflagged legacy confirmed transfers not yet directly deducted from store rows
   transfers.forEach(t => {
-    if (t.status === 'rejected') return; // rejected → stock returned, don't deduct
-    if (m[t.type] !== undefined) m[t.type] -= (t.qty||0);
+    if (t.status === 'pending_owner' || t.status === 'pending_receiver' || (t.status === 'confirmed' && !t.storeDeducted)) {
+      const items = (t.items && t.items.length) ? t.items : [{ type: t.type, qty: t.qty }];
+      items.forEach(it => {
+        const type = (it.type || '').trim();
+        const qty = Number(it.qty) || 0;
+        if (type && m[type] !== undefined) m[type] -= qty;
+      });
+    }
   });
   // Remove zero/negative
   Object.keys(m).forEach(k => { if (m[k] <= 0) delete m[k]; });
@@ -1979,7 +1988,10 @@ function getStoreStockMap() {
 function getBranchStockMap(branchId) {
   const bs = getData('branchStock');
   const m = {};
-  bs.filter(x => x.branch === branchId).forEach(r => { m[r.type] = (m[r.type]||0) + r.qty; });
+  bs.filter(x => x.branch === branchId).forEach(r => {
+    const t = (r.type || '').trim();
+    if (t) m[t] = (m[t] || 0) + (Number(r.qty) || 0);
+  });
   return m;
 }
 
@@ -2036,6 +2048,16 @@ function toggleBranchStockDetails(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleBranchReceivedLog(id, branchId) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isHidden = el.style.display === 'none';
+  el.style.display = isHidden ? 'block' : 'none';
+  if (isHidden) {
+    renderShopReceivedGoods(id, branchId);
+  }
 }
 
 // ── PRODUCTION FLOW: Procurement → Store → Cutting → Sewing → Store → Branch ──
@@ -2387,9 +2409,9 @@ function renderProdPipelineOverview() {
     if (x.status === 'partial') sewToStorePartialCount++;
   });
 
-  // 5. Store Finished Goods Stats
-  const store = getData('store');
-  const storeTotal = store.reduce((s, x) => s + (x.qty || 0), 0);
+  // 5. Store Finished Goods Stats (accurately deducting dispatches)
+  const storeMap = getStoreStockMap();
+  const storeTotal = Object.values(storeMap).reduce((s, q) => s + (Number(q) || 0), 0);
 
   const totalInTransit = cutToSewTransitQty + sewToStoreTransitQty;
   const transitBadge = totalInTransit > 0 
@@ -2721,10 +2743,12 @@ function renderDashboard() {
         <div class="branch-loc" style="margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           <span>📦 ${lang==='am'?'ክምችት':'Stock'}: <b style="color:var(--gold)">${totalStockQty.toLocaleString()} ${lang==='am'?'ቁ.':'pcs'}</b></span>
           ${totalStockQty > 0 ? `<button onclick="toggleBranchStockDetails('bStock_${b.id}')" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:var(--white-dim);padding:1px 6px;border-radius:4px;font-size:9.5px;cursor:pointer;font-family:inherit">${lang==='am'?'ዝርዝር ▾':'Details ▾'}</button>` : ''}
+          <button onclick="toggleBranchReceivedLog('bRec_${b.id}','${b.id}')" style="background:rgba(79,195,247,0.08);border:1px solid rgba(79,195,247,0.3);color:#4FC3F7;padding:1px 6px;border-radius:4px;font-size:9.5px;cursor:pointer;font-family:inherit">📥 ${lang==='am'?'የገቡ እቃዎች ▾':'Receipts ▾'}</button>
         </div>
         <div id="bStock_${b.id}" style="display:none;font-size:10px;color:var(--white-dim);background:rgba(0,0,0,0.25);padding:6px;border-radius:6px;margin-top:4px;max-height:90px;overflow-y:auto;border:1px solid rgba(255,255,255,0.06)">
           ${stockSummary}
         </div>
+        <div id="bRec_${b.id}" style="display:none;margin-top:8px"></div>
         ${bAssets.length?`<div class="branch-loc" style="margin-top:2px;color:#BA68C8">🏛️ ${lang==='am'?'ቋሚ ንብረት':'Fixed Assets'}: ${bAssets.length} (${fmtMoney(bAssetsValue)})</div>`:''}
         ${branchWholesale>0?`<div class="branch-loc" style="margin-top:2px;color:#4FC3F7">🏪 ${lang==='am'?'ጅምላ':'Wholesale'}: ${fmtMoney(branchWholesale)}</div>`:''}
       </div>
@@ -3425,7 +3449,7 @@ function renderTransferCard(tr) {
       <button onclick="rejectStoreTransfer('${tr.id}')" style="flex:1;padding:7px;font-size:11px;font-weight:700;font-family:inherit;border-radius:8px;border:1px solid rgba(224,90,90,0.4);background:rgba(224,90,90,0.08);color:#FF9090;cursor:pointer">❌ ${lang==='am'?'ውድቅ':'Reject'}</button>
     </div>`;
   } else if (tr.status === 'pending_receiver' && isSales2 && tr.branch === currentUser.branch) {
-    actions = `<button onclick="confirmStoreTransferReceipt('${tr.id}')" style="width:100%;margin-top:10px;padding:8px;font-size:11px;font-weight:700;font-family:inherit;border-radius:8px;border:1px solid rgba(79,195,247,0.4);background:rgba(79,195,247,0.1);color:#4FC3F7;cursor:pointer">📦 ${lang==='am'?'ተቀበልኩ ↗ ሱቅ ይግባ':'Confirm Receipt → Add to Stock'}</button>`;
+    actions = `<button onclick="confirmStoreTransferReceipt('${tr.id}', this)" style="width:100%;margin-top:10px;padding:8px;font-size:11px;font-weight:700;font-family:inherit;border-radius:8px;border:1px solid rgba(79,195,247,0.4);background:rgba(79,195,247,0.1);color:#4FC3F7;cursor:pointer">📦 ${lang==='am'?'ተቀበልኩ ↗ ሱቅ ይግባ':'Confirm Receipt → Add to Stock'}</button>`;
   }
   return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;position:relative;overflow:hidden">
     <div style="position:absolute;top:0;left:0;width:3px;height:100%;background:${sc};border-radius:2px 0 0 2px"></div>
@@ -3504,8 +3528,12 @@ function renderStore() {
   const h=lang==='am'?['ቀን','አይነት','ብዛት','ቦታ','ስረዝ']:['Date','Type','Qty','Location','Del'];
   document.getElementById('storeThead').innerHTML=`<tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>`;
   document.getElementById('storeTbody').innerHTML = data.length
-    ? data.map(r=>`<tr><td>${r.date}</td><td>${r.type}</td><td>${r.qty}</td><td>${r.location||'—'}</td>
-        <td>${editRecordBtn('store',r.id)}${requestDeleteBtn('store',r.id)}</td></tr>`).join('')
+    ? data.map(r => {
+        const q = Number(r.qty) || 0;
+        const qDisplay = q <= 0 ? `<span style="color:#FF9090;font-size:11px">0 (${lang==='am'?'የተላለፈ/ያለቀ':'exhausted'})</span>` : `<b style="color:var(--gold)">${q}</b>`;
+        return `<tr><td>${r.date}</td><td>${r.type}</td><td>${qDisplay}</td><td>${r.location||'—'}</td>
+        <td>${editRecordBtn('store',r.id)}${requestDeleteBtn('store',r.id)}</td></tr>`;
+      }).join('')
     : noDataRow(5);
 
   // ── Transfers section
@@ -3557,7 +3585,7 @@ function renderStore() {
             <button onclick="rejectStoreTransfer('${t.id}')" style="padding:3px 9px;border-radius:5px;border:1px solid rgba(224,90,90,0.4);background:rgba(224,90,90,0.1);color:#FF9090;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700">❌</button>
           </div>`;
         } else if (isSales2 && t.status === 'pending_receiver' && t.branch === myBranch2) {
-          actionCell = `<button onclick="confirmStoreTransferReceipt('${t.id}')" style="padding:3px 9px;border-radius:5px;border:1px solid rgba(79,195,247,0.5);background:rgba(79,195,247,0.1);color:#4FC3F7;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700">📦 ${lang==='am'?'ተቀበልኩ':'Receive'}</button>`;
+          actionCell = `<button onclick="confirmStoreTransferReceipt('${t.id}', this)" style="padding:3px 9px;border-radius:5px;border:1px solid rgba(79,195,247,0.5);background:rgba(79,195,247,0.1);color:#4FC3F7;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700">📦 ${lang==='am'?'ተቀበልኩ':'Receive'}</button>`;
         }
 
         return `<tr>
@@ -3611,6 +3639,8 @@ function openDispatchModal() {
   }
   const dispDate = document.getElementById('dispatchDate');
   if (dispDate) dispDate.value = new Date().toISOString().slice(0,10);
+  const dispQty = document.getElementById('dispatchQty');
+  if (dispQty) dispQty.value = '';
   const carrier = document.getElementById('dispatchCarrier');
   if (carrier) carrier.value = '';
   const note = document.getElementById('dispatchNote');
@@ -3629,15 +3659,15 @@ function updateDispatchAvail() {
 }
 
 function saveDispatch() {
-  const date=v('dispatchDate'), type=v('dispatchType'), qty=parseInt(v('dispatchQty'));
+  const date=v('dispatchDate'), type=v('dispatchType'), qty=parseInt(v('dispatchQty'), 10);
   const branch=v('dispatchBranch'), note=v('dispatchNote'), carrier=v('dispatchCarrier');
-  if (!date||!type||!qty||!branch) { toast(lang==='am'?'ሁሉንም ሙሉ':'Fill all fields','error'); return; }
+  if (!date||!type||!branch) { toast(lang==='am'?'ሁሉንም ሙሉ':'Fill all fields','error'); return; }
+  if (isNaN(qty) || qty <= 0) { toast(lang==='am'?'ትክክለኛ ብዛት ያስገቡ':'Enter valid quantity','error'); return; }
   if (!carrier.trim()) { toast(lang==='am'?'የወሰደው ሰው ስም ያስፈልጋል':'Carrier name required','error'); return; }
   const storeMap=getStoreStockMap();
   if ((storeMap[type]||0) < qty) { toast(lang==='am'?'ክምችት በቂ አይደለም':'Insufficient stock','error'); return; }
 
-  // Create PENDING transfer — store rows stay untouched.
-  // getStoreStockMap() deducts in-transit transfers automatically.
+  // Create PENDING transfer — getStoreStockMap() deducts in-transit transfers automatically.
   const transfers=getData('storeTransfers');
   transfers.push({
     id:uid(), date, type, qty,
@@ -3662,8 +3692,15 @@ function approveStoreTransfer(id) {
   const transfers=getData('storeTransfers');
   const t=transfers.find(x=>x.id===id);
   if(!t) return;
+  // If already confirmed by the receiving branch, never revert to pending!
+  if(t.status==='confirmed') {
+    toast(lang==='am'?'ዕቃው አስቀድሞ በሱቁ ተቀብሏል':'Stock already confirmed by shop','info');
+    renderStore(); renderDashboard(); buildSidebar(); return;
+  }
+  if(t.status!=='pending_owner') return;
   t.status='pending_receiver';
   t.approvedBy=currentUser.username;
+  t.approvedByName=currentUser.name||currentUser.username;
   t.approvedAt=new Date().toISOString();
   saveData('storeTransfers',transfers);
   renderStore();
@@ -3677,8 +3714,13 @@ function rejectStoreTransfer(id) {
   const transfers=getData('storeTransfers');
   const t=transfers.find(x=>x.id===id);
   if(!t) return;
+  if(t.status==='confirmed') {
+    toast(lang==='am'?'የተረጋገጠ ዝውውር ውድቅ ማድረግ አይቻልም':'Cannot reject an already confirmed transfer','error');
+    return;
+  }
   t.status='rejected';
   t.rejectedBy=currentUser.username;
+  t.rejectedByName=currentUser.name||currentUser.username;
   t.rejectedAt=new Date().toISOString();
   saveData('storeTransfers',transfers);
   renderStore();
@@ -3687,39 +3729,99 @@ function rejectStoreTransfer(id) {
   toast(lang==='am'?'❌ ውድቅ — ዕቃ ወደ ስቶር ተመልሷል':'❌ Rejected — stock returned to store');
 }
 
+// In-memory set to lock concurrent confirmation calls
+const _confirmingTransferIds = new Set();
+
 // ── RECEIVER (sales staff or owner): confirm receipt → stock enters branch
-function confirmStoreTransferReceipt(id) {
-  const transfers=getData('storeTransfers');
-  const t=transfers.find(x=>x.id===id);
-  if(!t) return;
-  // Security: only the sales staff of the matching branch or owner can confirm receipt
-  const canConfirm = (currentUser.role === 'sales' && currentUser.branch === t.branch) || currentUser.role === 'owner';
-  if(!canConfirm) {
-    toast(lang==='am'?'⛔ ይህን ለማረጋገጥ ፈቃድ የለዎትም':'⛔ Only the branch sales staff or owner can confirm receipt', 'error');
-    return;
+function confirmStoreTransferReceipt(id, btnElement) {
+  if (!id) return;
+  if (_confirmingTransferIds.has(id)) return;
+  _confirmingTransferIds.add(id);
+
+  if (btnElement && btnElement.disabled !== undefined) {
+    btnElement.disabled = true;
+    btnElement.style.opacity = '0.5';
+    btnElement.style.pointerEvents = 'none';
   }
-  t.status='confirmed';
-  t.receivedBy=currentUser.username;
-  t.receivedByName=currentUser.name||currentUser.username;
-  t.receivedAt=new Date().toISOString();
-  saveData('storeTransfers',transfers);
 
-  // NOW add to branch stock
-  const bs=getData('branchStock');
-  const ex=bs.find(x=>x.branch===t.branch&&x.type===t.type);
-  if(ex) ex.qty+=t.qty; else bs.push({id:uid(),branch:t.branch,type:t.type,qty:t.qty});
-  saveData('branchStock',bs);
+  try {
+    const transfers=getData('storeTransfers');
+    const t=transfers.find(x=>x.id===id);
+    if(!t) return;
 
-  // Legacy dispatch log entry
-  const dispatches=getData('dispatches');
-  dispatches.push({id:uid(),date:t.date,type:t.type,qty:t.qty,branch:t.branch,note:t.note||'',carrier:t.carrier,transferId:t.id});
-  saveData('dispatches',dispatches);
+    // Strict idempotency: Never re-confirm or double add stock!
+    if(t.status==='confirmed') {
+      toast(lang==='am'?'ይህ ዝውውር አስቀድሞ ተረጋግጧል':'This transfer has already been confirmed','info');
+      refreshActivePanel();
+      return;
+    }
 
-  renderStore();
-  if(typeof renderSales==='function') renderSales();
-  if(typeof renderPOS==='function') renderPOS();
-  buildSidebar();
-  toast(lang==='am'?`✅ ${t.qty} ${t.type} ተቀብሎ ወደ ሱቅ ገብቷል`:`✅ ${t.qty} ${t.type} received — added to branch stock`);
+    // Security: only the sales staff of the matching branch or owner can confirm receipt
+    const canConfirm = (currentUser.role === 'sales' && currentUser.branch === t.branch) || currentUser.role === 'owner';
+    if(!canConfirm) {
+      toast(lang==='am'?'⛔ ይህን ለማረጋገጥ ፈቃድ የለዎትም':'⛔ Only the branch sales staff or owner can confirm receipt', 'error');
+      return;
+    }
+
+    t.status='confirmed';
+    t.receivedBy=currentUser.username;
+    t.receivedByName=currentUser.name||currentUser.username;
+    t.receivedAt=new Date().toISOString();
+    if(!t.approvedBy) {
+      t.approvedBy=currentUser.username;
+      t.approvedByName=currentUser.name||currentUser.username;
+      t.approvedAt=t.receivedAt;
+    }
+
+    // 1. Credit branch stock (strictly numeric, handle items array or type/qty)
+    const bs=getData('branchStock');
+    const items = (t.items && t.items.length) ? t.items : [{ type: t.type, qty: t.qty }];
+    items.forEach(it => {
+      const q = Number(it.qty) || 0;
+      const itType = (it.type || '').trim();
+      if (q <= 0 || !itType) return;
+      const ex = bs.find(x => x.branch === t.branch && (x.type || '').trim() === itType);
+      if (ex) {
+        ex.qty = Math.max(0, (Number(ex.qty) || 0) + q);
+      } else {
+        bs.push({ id: uid(), branch: t.branch, type: itType, qty: q });
+      }
+    });
+    saveData('branchStock', bs);
+
+    // 2. Deduct from store inventory rows (so physical warehouse count reduces accurately!)
+    const store=getData('store');
+    items.forEach(it => {
+      let rem = Number(it.qty) || 0;
+      const itType = (it.type || '').trim();
+      if (rem <= 0 || !itType) return;
+      for (let i = 0; i < store.length && rem > 0; i++) {
+        if ((store[i].type || '').trim() === itType && Number(store[i].qty) > 0) {
+          const d = Math.min(Number(store[i].qty) || 0, rem);
+          store[i].qty = Math.max(0, (Number(store[i].qty) || 0) - d);
+          rem -= d;
+        }
+      }
+    });
+    t.storeDeducted = true;
+    saveData('store', store);
+    saveData('storeTransfers', transfers);
+
+    // 3. Legacy dispatch log entry
+    const dispatches=getData('dispatches');
+    dispatches.push({id:uid(),date:t.date,type:t.type,qty:Number(t.qty)||0,branch:t.branch,note:t.note||'',carrier:t.carrier,transferId:t.id});
+    saveData('dispatches',dispatches);
+
+    renderStore();
+    if(typeof renderSales==='function') renderSales();
+    if(typeof renderPOS==='function') renderPOS();
+    if(typeof renderProdPipelineOverview==='function') renderProdPipelineOverview();
+    renderDashboard();
+    buildSidebar();
+    toast(lang==='am'?`✅ ${t.qty} ${t.type} ተቀብሎ ወደ ሱቅ ገብቷል`:`✅ ${t.qty} ${t.type} received — added to branch stock`);
+  } finally {
+    _confirmingTransferIds.delete(id);
+  }
 }
 
 // ── SALES ──────────────────────────────────────────────────────
@@ -3886,6 +3988,12 @@ function renderSales() {
   // Wholesale section for owner
   renderWholesaleReportForOwner();
   renderBranchLoanForOwner();
+  // 1ኛ ሽያጭ ላይ ሪፈንድ ሪፖርት ኦነር ላይ እንዲታይ ማድረግ
+  renderOwnerRefundReport('ownerSalesRefundSection');
+  // 2ኛ የየእለቱን ሸያጭ ወይም ምርት የተጠቃለለ መረጃ ወደ ኃላ ያለፈን ቀን ለየብቻው ማሳያ
+  renderPastDailySummary('ownerPastDailySalesSection', today);
+  // ሱቆች ላይ ገቢ የሆነ እቃ ዝርዝር (ለኦነር)
+  renderShopReceivedGoods('shopReceivedGoodsSection');
 }
 
 function updateSaleStock() {
@@ -4004,7 +4112,7 @@ function renderPOS() {
                 <div style="font-size:13px;color:#4FC3F7;margin-bottom:3px">📤 ${itemsStr} &nbsp;${statusNotice}</div>
                 <div style="font-size:11px;color:var(--white-dim)">👤 ${lang==='am'?'የላከ':'Sent by'}: <b style="color:var(--white)">${sentBy}</b> ${t.carrier ? `· 🚚 ተሸካሚ: <b>${t.carrier}</b>` : ''} &nbsp;|&nbsp; 📅 ${t.date||''}</div>
               </div>
-              <button onclick="confirmStoreTransferReceipt('${t.id}')"
+              <button onclick="confirmStoreTransferReceipt('${t.id}', this)"
                 style="padding:8px 16px;border-radius:9px;border:1.5px solid #4FC3F7;background:rgba(79,195,247,0.15);color:#4FC3F7;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;white-space:nowrap">
                 📥 ${lang==='am'?'ተቀብያለሁ':'Confirm Receipt'}
               </button>
@@ -4131,6 +4239,7 @@ function renderPOS() {
   if (custSel) custSel.innerHTML = customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('') || '<option value="">—</option>';
 
   renderPOSCart();
+  renderShopReceivedGoods('posShopReceivedGoodsSection', currentUser.branch);
 }
 
 function renderPOSProducts(stockMapArg, pricesArg) {
@@ -4376,6 +4485,7 @@ function renderSalesReport() {
     renderPOSByDate();
   }
   renderWholesaleReportForStaff();
+  renderShopReceivedGoods('salesReportReceivedGoodsSection', currentUser.branch);
 }
 
 // ── Called at end of renderSalesReport to add wholesale section ──
@@ -6805,15 +6915,30 @@ function navigateToReport(cat, period) {
 // WHOLESALE (የጅምላ ሽያጭ) — Sales staff submits, Owner approves
 // ═══════════════════════════════════════════════════════════════
 
+let posWsItems = [];            // [{ product, qty, price, total, stock }]
+let modalWsItems = [];          // [{ product, qty, price, total, stock }]
+let wsMultiSelectTarget = 'pos'; // 'pos' or 'modal'
+let wsMultiSelectionTemp = {};   // { [type]: { checked, qty, price, stock, retailPrice } }
+
+// Helper: Get available stock map for wholesale context
+function getWsContextStockMap(target = wsMultiSelectTarget) {
+  if (target === 'pos') {
+    return getBranchStockMap(currentUser.branch);
+  }
+  const branch = currentUser.role === 'owner' ? null : currentUser.branch;
+  return branch ? getBranchStockMap(branch) : getStoreStockMap();
+}
+
+// ── WHOLESALE MODAL (OWNER / ADMIN) ──────────────────────────
 function openWholesaleModal() {
   const prices = getData('productPrices');
-  const branch = currentUser.role === 'owner' ? null : currentUser.branch;
-  const stockMap = branch ? getBranchStockMap(branch) : getStoreStockMap();
+  const stockMap = getWsContextStockMap('modal');
   const sel = document.getElementById('wsProduct');
-  if (!sel) return;
-  sel.innerHTML = prices.map(p =>
-    `<option value="${p.type}">${p.type} (${lang==='am'?'ክምችት':'stock'}: ${stockMap[p.type]||0})</option>`
-  ).join('') || `<option value="">${lang==='am'?'ምርት የለም':'No products'}</option>`;
+  if (sel) {
+    sel.innerHTML = prices.map(p =>
+      `<option value="${p.type}">${p.type} (${lang==='am'?'ክምችት':'stock'}: ${stockMap[p.type]||0})</option>`
+    ).join('') || `<option value="">${lang==='am'?'ምርት የለም':'No products'}</option>`;
+  }
   const d = document.getElementById('wsDate');
   if (d) d.value = new Date().toISOString().slice(0,10);
   const q = document.getElementById('wsQty'); if (q) q.value = '';
@@ -6822,9 +6947,14 @@ function openWholesaleModal() {
   const ph = document.getElementById('wsPhone'); if (ph) ph.value = '';
   const no = document.getElementById('wsNote'); if (no) no.value = '';
   const pm = document.getElementById('wsPayment'); if (pm) pm.value = 'cash';
+  const via = document.getElementById('wsTransferVia'); if (via) via.value = '';
   wsTogglePayment();
   wsUpdatePrice();
-  document.getElementById('wsTotal').textContent = '—';
+
+  // Clear modal selected items
+  modalWsItems = [];
+  wsModalRenderItems();
+
   openModal('wholesaleModal');
 }
 
@@ -6843,52 +6973,205 @@ function wsUpdatePrice() {
     priceEl.style.color = wholesalePrice > 0 ? '#4FC3F7' : '';
     priceEl.placeholder = wholesalePrice > 0 ? fmtMoney(wholesalePrice) : (lang==='am'?'ዋጋ አልተቀመጠም':'Price not set');
   }
-  wsUpdateTotal();
-}
-
-function wsUpdateTotal() {
-  const qty   = parseFloat(document.getElementById('wsQty')?.value)   || 0;
-  const price = parseFloat(document.getElementById('wsPrice')?.value) || 0;
-  const totalEl = document.getElementById('wsTotal');
-  if (totalEl) totalEl.textContent = qty && price ? fmtMoney(qty * price) : '—';
 }
 
 function wsTogglePayment() {
   const pm  = document.getElementById('wsPayment')?.value;
   const row = document.getElementById('wsTransferRow');
-  if (row) row.style.display = pm === 'transfer' ? 'flex' : 'none';
+  if (row) row.style.display = pm === 'transfer' ? 'block' : 'none';
 }
 
-function saveWholesale() {
+function wsModalAddItem() {
+  const product = document.getElementById('wsProduct')?.value;
+  const qty     = parseInt(document.getElementById('wsQty')?.value);
+  const price   = parseFloat(document.getElementById('wsPrice')?.value);
+
+  if (!product) {
+    toast(lang==='am'?'እባክዎ ምርት ይምረጡ':'Please select a product', 'error'); return;
+  }
+  if (!qty || qty <= 0) {
+    toast(lang==='am'?'ትክክለኛ ብዛት ያስገቡ':'Enter a valid quantity', 'error'); return;
+  }
+  if (!price || price <= 0) {
+    toast(lang==='am'?'የጅምላ ዋጋ አልተቀመጠም':'Wholesale price not set for this product', 'error'); return;
+  }
+
+  const stockMap = getWsContextStockMap('modal');
+  const stock = stockMap[product] || 0;
+  const existing = modalWsItems.find(x => x.product === product);
+  const currentQty = existing ? existing.qty : 0;
+
+  if (currentQty + qty > stock) {
+    toast(`${product}: ${lang==='am'?'በቂ ክምችት የለም (የቀረው':'Insufficient stock (Remaining'}: ${stock})`, 'error');
+    return;
+  }
+
+  if (existing) {
+    existing.qty += qty;
+    existing.total = existing.qty * existing.price;
+  } else {
+    modalWsItems.push({
+      product,
+      qty,
+      price,
+      total: qty * price,
+      stock
+    });
+  }
+
+  const qInp = document.getElementById('wsQty');
+  if (qInp) qInp.value = '';
+  wsModalRenderItems();
+  toast(lang==='am'?`➕ ${product} ተጨምሯል`:`➕ ${product} added`);
+}
+
+function wsModalRemoveItem(idx) {
+  modalWsItems.splice(idx, 1);
+  wsModalRenderItems();
+}
+
+function wsModalChangeQty(idx, val) {
+  const n = parseInt(val) || 0;
+  if (n <= 0) {
+    wsModalRemoveItem(idx);
+    return;
+  }
+  const item = modalWsItems[idx];
+  if (!item) return;
+  if (n > item.stock) {
+    toast(`${item.product}: ${lang==='am'?'ያለው ክምችት':'Available stock'}: ${item.stock}`, 'error');
+    wsModalRenderItems();
+    return;
+  }
+  item.qty = n;
+  item.total = n * item.price;
+  wsModalRenderItems();
+}
+
+function wsModalRenderItems() {
+  const tbody = document.getElementById('wsModalItemsTbody');
+  const cntEl = document.getElementById('wsModalItemsCount');
+  const pcsEl = document.getElementById('wsModalTotalPieces');
+  const totEl = document.getElementById('wsTotal');
+
+  const totalPieces = modalWsItems.reduce((s, it) => s + it.qty, 0);
+  const grandTotal  = modalWsItems.reduce((s, it) => s + it.total, 0);
+
+  if (cntEl) cntEl.textContent = modalWsItems.length;
+  if (pcsEl) pcsEl.textContent = totalPieces;
+  if (totEl) totEl.textContent = totalPieces > 0 ? fmtMoney(grandTotal) : '—';
+
+  if (!tbody) return;
+  if (!modalWsItems.length) {
+    tbody.innerHTML = `<tr>
+      <td colspan="6" style="text-align:center;padding:16px;color:rgba(197,203,216,0.45);font-size:11.5px">
+        🛒 ምንም የተመረጠ ምርት የለም — ከላይ ምርት ይጨምሩ ወይም "በጅምላ ምረጥ" የሚለውን ይጫኑ
+      </td>
+    </tr>`;
+    return;
+  }
+
+  tbody.innerHTML = modalWsItems.map((it, idx) => {
+    const isExceeded = it.qty > it.stock;
+    const stockColor = isExceeded ? '#FF9090' : (it.stock > 10 ? '#80e080' : '#FFA726');
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);background:${idx%2===0?'rgba(255,255,255,0.015)':'transparent'}">
+      <td style="padding:6px 10px;font-weight:600;color:var(--white)">
+        <div>${it.product}</div>
+        ${isExceeded ? `<div style="font-size:9.5px;color:#FF9090">⚠️ ክምችት አልቋል!</div>` : ''}
+      </td>
+      <td style="padding:6px;text-align:center;color:${stockColor};font-weight:600">${it.stock}</td>
+      <td style="padding:6px;text-align:center">
+        <input type="number" min="1" max="${it.stock}" value="${it.qty}" onchange="wsModalChangeQty(${idx}, this.value)"
+          style="width:58px;padding:3px 6px;text-align:center;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;font-size:11.5px">
+      </td>
+      <td style="padding:6px 8px;text-align:right;color:#4FC3F7">${fmtMoney(it.price)}</td>
+      <td style="padding:6px 10px;text-align:right;font-weight:700;color:var(--gold)">${fmtMoney(it.total)}</td>
+      <td style="padding:6px;text-align:center">
+        <button type="button" onclick="wsModalRemoveItem(${idx})" style="background:transparent;border:none;color:#FF9090;cursor:pointer;font-size:14px;padding:2px 5px" title="አስወግድ">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function saveWholesale(btn) {
+  if (btn && btn.disabled) return;
   const date     = document.getElementById('wsDate')?.value;
   const customer = document.getElementById('wsCustomer')?.value.trim();
   const phone    = document.getElementById('wsPhone')?.value.trim();
-  const product  = document.getElementById('wsProduct')?.value;
-  const qty      = parseInt(document.getElementById('wsQty')?.value);
-  const price    = parseFloat(document.getElementById('wsPrice')?.value);
   const payment  = document.getElementById('wsPayment')?.value || 'cash';
   const transferVia = document.getElementById('wsTransferVia')?.value.trim();
   const note     = document.getElementById('wsNote')?.value.trim();
 
-  if (!date || !customer || !product || !qty || !price) {
-    toast(lang==='am'?'ሁሉንም ሙሉ ያስፈልጋሉ':'Fill all required fields', 'error'); return;
+  if (!date || !customer) {
+    toast(lang==='am'?'እባክዎ ቀን እና የደንበኛ ስም ያስገቡ':'Enter date and customer name', 'error'); return;
   }
+
+  // If user typed in the quick add fields without clicking "+ አክል", auto-add it
+  if (!modalWsItems.length) {
+    const singleProd  = document.getElementById('wsProduct')?.value;
+    const singleQty   = parseInt(document.getElementById('wsQty')?.value);
+    const singlePrice = parseFloat(document.getElementById('wsPrice')?.value);
+    if (singleProd && singleQty > 0 && singlePrice > 0) {
+      const stockMap = getWsContextStockMap('modal');
+      const stock = stockMap[singleProd] || 0;
+      if (singleQty > stock) {
+        toast(`${singleProd}: ${lang==='am'?'በቂ ክምችት የለም':'Insufficient stock'}`, 'error'); return;
+      }
+      modalWsItems.push({
+        product: singleProd,
+        qty: singleQty,
+        price: singlePrice,
+        total: singleQty * singlePrice,
+        stock
+      });
+      wsModalRenderItems();
+    }
+  }
+
+  if (!modalWsItems.length) {
+    toast(lang==='am'?'እባክዎ ቢያንስ አንድ ምርት ይጨምሩ':'Please add at least one product', 'error'); return;
+  }
+
   if (payment === 'transfer' && !transferVia) {
     toast(lang==='am'?'ባንክ/ቻናል ያስፈልጋል':'Bank/channel required', 'error'); return;
   }
 
-  // Check stock
+  // Re-verify stock for all items
   const branch   = currentUser.role === 'owner' ? null : currentUser.branch;
   const stockMap = branch ? getBranchStockMap(branch) : getStoreStockMap();
-  if ((stockMap[product] || 0) < qty) {
-    toast(`${product}: ${lang==='am'?'ክምችት አልቋል':'Insufficient stock'}`, 'error'); return;
+  for (const it of modalWsItems) {
+    const avail = stockMap[it.product] || 0;
+    if (it.qty > avail) {
+      toast(`${it.product}: ${lang==='am'?'በቂ ክምችት የለም (ያለው':'Insufficient stock (available'}: ${avail})`, 'error');
+      return;
+    }
   }
+
+  const grandTotal = modalWsItems.reduce((s, it) => s + it.total, 0);
+  const totalPieces = modalWsItems.reduce((s, it) => s + it.qty, 0);
+  const avgPrice = Math.round(grandTotal / (totalPieces || 1));
+  const productSummary = modalWsItems.length === 1
+    ? modalWsItems[0].product
+    : modalWsItems.map(it => `${it.product} (${it.qty})`).join(', ');
 
   const wholesale = getData('wholesale');
   wholesale.push({
-    id: uid(), date, customer, phone, product, qty, price,
-    total: qty * price,
-    payment, transferVia: transferVia || '',
+    id: uid(),
+    date,
+    customer,
+    phone: phone || '',
+    items: modalWsItems.map(it => ({
+      product: it.product,
+      qty: it.qty,
+      price: it.price,
+      total: it.total
+    })),
+    product: productSummary,
+    qty: totalPieces,
+    price: avgPrice,
+    total: grandTotal,
+    payment,
+    transferVia: transferVia || '',
     note: note || '',
     branch: branch || 'store',
     by: currentUser.username,
@@ -6896,48 +7179,276 @@ function saveWholesale() {
     status: 'pending',   // pending → approved / rejected
     createdAt: new Date().toISOString()
   });
+
   saveData('wholesale', wholesale);
+  modalWsItems = [];
   closeModal('wholesaleModal');
   buildSidebar();
   renderWholesale();
   renderDashboard();
-  toast(lang==='am'?`⏳ ጅምላ ሽያጭ ለኦነር ተልኳል — ፈቃድ ይጠበቃል`:`⏳ Wholesale sent for owner approval`);
+  toast(lang==='am'?`⏳ የጅምላ ሽያጭ ለኦነር ተልኳል — ፈቃድ ይጠበቃል`:`⏳ Wholesale sent for owner approval`);
 }
 
+// ── MULTI-SELECT CHECKLIST MODAL ──────────────────────────────
+function openWsMultiSelectModal(target = 'pos') {
+  wsMultiSelectTarget = target;
+  const stockMap = getWsContextStockMap(target);
+  const prices   = getData('productPrices');
+  const existingItems = target === 'pos' ? posWsItems : modalWsItems;
+
+  wsMultiSelectionTemp = {};
+  prices.forEach(p => {
+    const stock = stockMap[p.type] || 0;
+    const wholesalePrice = p.wholesalePrice || 0;
+    const existing = existingItems.find(x => x.product === p.type);
+    wsMultiSelectionTemp[p.type] = {
+      checked: !!existing,
+      qty: existing ? existing.qty : 1,
+      price: wholesalePrice,
+      retailPrice: p.price || 0,
+      stock: stock
+    };
+  });
+
+  const searchInp = document.getElementById('wsMultiSearch');
+  if (searchInp) searchInp.value = '';
+
+  renderWsMultiProductList('');
+  updateWsMultiSummary();
+  openModal('wsMultiSelectModal');
+}
+
+function renderWsMultiProductList(filterText = '') {
+  const container = document.getElementById('wsMultiProductList');
+  const availCountEl = document.getElementById('wsMultiAvailableCount');
+  if (!container) return;
+
+  const q = (filterText || '').trim().toLowerCase();
+  const entries = Object.entries(wsMultiSelectionTemp).filter(([type]) => {
+    return !q || type.toLowerCase().includes(q);
+  });
+
+  if (availCountEl) {
+    availCountEl.textContent = `${entries.length} ${lang==='am'?'ምርቶች':'products'}`;
+  }
+
+  if (!entries.length) {
+    container.innerHTML = `<div style="text-align:center;padding:24px;color:rgba(197,203,216,0.45);font-size:12px">
+      🔍 ምንም የሚዛመድ ምርት አልተገኘም
+    </div>`;
+    return;
+  }
+
+  container.innerHTML = entries.map(([type, it]) => {
+    const hasStock = it.stock > 0;
+    const hasPrice = it.price > 0;
+    const isDisabled = !hasStock || !hasPrice;
+    const subtotal = (it.checked && hasPrice) ? (it.qty * it.price) : 0;
+    const stockColor = hasStock ? (it.stock > 10 ? '#80e080' : '#FFA726') : '#FF9090';
+
+    return `<div id="wsMultiRow_${type}" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:${it.checked?'rgba(201,168,76,0.08)':'rgba(255,255,255,0.02)'};border:1px solid ${it.checked?'rgba(201,168,76,0.4)':'rgba(255,255,255,0.06)'};border-radius:8px;gap:10px;${isDisabled?'opacity:0.5':''}">
+      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+        <input type="checkbox" id="wsChk_${type}" ${it.checked?'checked':''} ${isDisabled?'disabled':''} onchange="toggleWsMultiItem('${type}')"
+          style="width:17px;height:17px;cursor:pointer;accent-color:var(--gold);flex-shrink:0">
+        <div style="min-width:0;cursor:pointer" onclick="if(!${isDisabled})toggleWsMultiItem('${type}')">
+          <div style="font-size:12.5px;font-weight:600;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            ${type}
+          </div>
+          <div style="font-size:10px;color:rgba(197,203,216,0.5);display:flex;gap:8px;align-items:center;margin-top:2px;flex-wrap:wrap">
+            <span style="color:${stockColor}">📦 ${lang==='am'?'ክምችት':'Stock'}: ${it.stock}</span>
+            <span>·</span>
+            <span style="color:#4FC3F7">💰 ${hasPrice ? fmtMoney(it.price) : '<span style="color:#FFA726">ዋጋ አልተወሰነም</span>'}</span>
+            ${it.retailPrice ? `<span style="color:rgba(197,203,216,0.35)">(ችርቻሮ ${fmtMoney(it.retailPrice)})</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:10.5px;color:rgba(197,203,216,0.45)">ብዛት:</span>
+          <input type="number" id="wsMultiQty_${type}" min="1" max="${it.stock}" value="${it.qty}" ${!it.checked?'disabled':''} oninput="updateWsMultiItemQty('${type}')"
+            style="width:58px;padding:4px 6px;font-size:11.5px;text-align:center;border-radius:6px;border:1px solid ${it.checked?'rgba(201,168,76,0.4)':'rgba(255,255,255,0.1)'};background:rgba(255,255,255,0.06);color:#fff;box-sizing:border-box">
+        </div>
+        <div style="width:85px;text-align:right;font-size:12px;font-weight:700;color:${it.checked?'var(--gold)':'rgba(197,203,216,0.3)'}" id="wsMultiSub_${type}">
+          ${subtotal > 0 ? fmtMoney(subtotal) : '—'}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterWsMultiProducts() {
+  const q = document.getElementById('wsMultiSearch')?.value || '';
+  renderWsMultiProductList(q);
+}
+
+function toggleWsMultiItem(type) {
+  const item = wsMultiSelectionTemp[type];
+  if (!item) return;
+  item.checked = !item.checked;
+
+  const row = document.getElementById(`wsMultiRow_${type}`);
+  const chk = document.getElementById(`wsChk_${type}`);
+  const qtyInp = document.getElementById(`wsMultiQty_${type}`);
+  const subEl = document.getElementById(`wsMultiSub_${type}`);
+
+  if (chk) chk.checked = item.checked;
+  if (qtyInp) qtyInp.disabled = !item.checked;
+  if (row) {
+    row.style.background = item.checked ? 'rgba(201,168,76,0.08)' : 'rgba(255,255,255,0.02)';
+    row.style.borderColor = item.checked ? 'rgba(201,168,76,0.4)' : 'rgba(255,255,255,0.06)';
+  }
+  if (subEl) {
+    const sub = item.checked ? (item.qty * item.price) : 0;
+    subEl.textContent = sub > 0 ? fmtMoney(sub) : '—';
+    subEl.style.color = item.checked ? 'var(--gold)' : 'rgba(197,203,216,0.3)';
+  }
+
+  updateWsMultiSummary();
+}
+
+function updateWsMultiItemQty(type) {
+  const item = wsMultiSelectionTemp[type];
+  if (!item) return;
+  const inp = document.getElementById(`wsMultiQty_${type}`);
+  let val = parseInt(inp?.value);
+  if (isNaN(val) || val < 1) val = 1;
+  item.qty = val;
+
+  const subEl = document.getElementById(`wsMultiSub_${type}`);
+  if (subEl) {
+    const sub = item.checked ? (item.qty * item.price) : 0;
+    subEl.textContent = sub > 0 ? fmtMoney(sub) : '—';
+  }
+
+  updateWsMultiSummary();
+}
+
+function selectAllWsMulti(select = true) {
+  Object.keys(wsMultiSelectionTemp).forEach(type => {
+    const it = wsMultiSelectionTemp[type];
+    if (select) {
+      if (it.stock > 0 && it.price > 0) it.checked = true;
+    } else {
+      it.checked = false;
+    }
+  });
+  const q = document.getElementById('wsMultiSearch')?.value || '';
+  renderWsMultiProductList(q);
+  updateWsMultiSummary();
+}
+
+function updateWsMultiSummary() {
+  const selectedEntries = Object.entries(wsMultiSelectionTemp).filter(([_, it]) => it.checked);
+  const count = selectedEntries.length;
+  const pieces = selectedEntries.reduce((s, [_, it]) => s + it.qty, 0);
+  const total = selectedEntries.reduce((s, [_, it]) => s + (it.qty * it.price), 0);
+
+  const cntEl = document.getElementById('wsMultiSelectedCount');
+  const pcsEl = document.getElementById('wsMultiSelectedPieces');
+  const totEl = document.getElementById('wsMultiSelectedTotal');
+
+  if (cntEl) cntEl.textContent = count;
+  if (pcsEl) pcsEl.textContent = pieces;
+  if (totEl) totEl.textContent = fmtMoney(total);
+}
+
+function applyWsMultiSelection() {
+  const selectedList = Object.entries(wsMultiSelectionTemp)
+    .filter(([_, it]) => it.checked && it.qty > 0)
+    .map(([type, it]) => ({
+      product: type,
+      qty: it.qty,
+      price: it.price,
+      total: it.qty * it.price,
+      stock: it.stock
+    }));
+
+  if (!selectedList.length) {
+    toast(lang==='am'?'እባክዎ ቢያንስ አንድ ምርት ይምረጡ':'Please select at least one product', 'error');
+    return;
+  }
+
+  // Stock check
+  for (const it of selectedList) {
+    if (it.qty > it.stock) {
+      toast(`${it.product}: ${lang==='am'?'ያለው ክምችት':'Available stock'}: ${it.stock}`, 'error');
+      return;
+    }
+  }
+
+  if (wsMultiSelectTarget === 'pos') {
+    posWsItems = selectedList;
+    posWsRenderItems();
+  } else {
+    modalWsItems = selectedList;
+    wsModalRenderItems();
+  }
+
+  closeModal('wsMultiSelectModal');
+  toast(lang==='am'?`✅ ${selectedList.length} የተለያዩ ምርቶች ተመርጠዋል`:`✅ ${selectedList.length} products selected`);
+}
+
+// ── WHOLESALE APPROVAL / REJECTION ───────────────────────────
 function approveWholesale(id) {
   const wholesale = getData('wholesale');
   const w = wholesale.find(x => x.id === id);
   if (!w) return;
-  // Deduct stock
+  if (w.status === 'approved') return; // idempotency protection
+
+  const items = (w.items && w.items.length)
+    ? w.items
+    : [{ product: w.product, qty: w.qty, price: w.price, total: w.total || (w.qty * w.price) }];
+
+  // Deduct stock for each line item
   if (w.branch && w.branch !== 'store') {
     const bs = getData('branchStock');
-    let rem = w.qty;
-    for (let i = 0; i < bs.length && rem > 0; i++) {
-      if (bs[i].branch === w.branch && bs[i].type === w.product) {
-        const d = Math.min(bs[i].qty, rem); bs[i].qty -= d; rem -= d;
+    for (const it of items) {
+      let rem = it.qty;
+      for (let i = 0; i < bs.length && rem > 0; i++) {
+        if (bs[i].branch === w.branch && bs[i].type === it.product) {
+          const d = Math.min(bs[i].qty, rem);
+          bs[i].qty -= d;
+          rem -= d;
+        }
       }
     }
     saveData('branchStock', bs);
   } else {
     // Deduct from store
     const store = getData('store');
-    let rem = w.qty;
-    for (let i = 0; i < store.length && rem > 0; i++) {
-      if (store[i].type === w.product) {
-        const d = Math.min(store[i].qty, rem); store[i].qty -= d; rem -= d;
+    for (const it of items) {
+      let rem = it.qty;
+      for (let i = 0; i < store.length && rem > 0; i++) {
+        if (store[i].type === it.product) {
+          const d = Math.min(store[i].qty, rem);
+          store[i].qty -= d;
+          rem -= d;
+        }
       }
     }
     saveData('store', store);
   }
-  // Record as sale
+
+  // Record an entry in sales for each individual item
   const sales = getData('sales');
-  sales.push({
-    id: uid(), date: w.date, product: w.product, qty: w.qty, price: w.price,
-    payment: w.payment, transferVia: w.transferVia,
-    creditCustomer: w.customer, customerName: w.customer,
-    branch: w.branch, note: w.note || '', by: w.by,
-    isWholesale: true
-  });
+  for (const it of items) {
+    sales.push({
+      id: uid(),
+      date: w.date,
+      product: it.product,
+      qty: it.qty,
+      price: it.price,
+      payment: w.payment,
+      transferVia: w.transferVia,
+      creditCustomer: w.customer,
+      customerName: w.customer,
+      branch: w.branch,
+      note: w.note ? `${w.note} (ጅምላ)` : 'ጅምላ ሽያጭ',
+      by: w.by,
+      isWholesale: true,
+      wholesaleId: w.id
+    });
+  }
   saveData('sales', sales);
 
   w.status = 'approved';
@@ -6947,7 +7458,7 @@ function approveWholesale(id) {
   renderWholesale();
   renderDashboard();
   buildSidebar();
-  toast(lang==='am'?`✅ የጅምላ ሽያጭ ፀድቋል — ${w.product} ×${w.qty} (${w.customer})`:`✅ Wholesale approved — ${w.product} ×${w.qty} (${w.customer})`);
+  toast(lang==='am'?`✅ የጅምላ ሽያጭ ፀድቋል — ${w.customer}`:`✅ Wholesale approved — ${w.customer}`);
 }
 
 function rejectWholesale(id) {
@@ -6969,8 +7480,6 @@ function renderWholesale() {
   const isOwner = currentUser.role === 'owner';
   const myBranch = currentUser.branch;
 
-  // Wholesale add button only exists in POS, not in this panel
-
   // --- Owner approval queue ---
   const queueEl = document.getElementById('wholesaleApprovalQueue');
   if (queueEl) {
@@ -6988,18 +7497,33 @@ function renderWholesale() {
             <span style="font-size:16px">🚨</span>
             <span style="font-size:13px;font-weight:700;color:#FFA726">${lang==='am'?`ፈቃድ የሚጠብቁ ጅምላ ሽያጮች (${pending.length})`:`Wholesale sales awaiting approval (${pending.length})`}</span>
           </div>
-          ${pending.map(w => `
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;margin-bottom:6px;background:rgba(0,0,0,0.2);border-radius:8px;flex-wrap:wrap">
+          ${pending.map(w => {
+            const hasMulti = w.items && w.items.length > 1;
+            const itemBadges = hasMulti
+              ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
+                  ${w.items.map(it => `<span style="font-size:10px;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.3);border-radius:4px;padding:1px 6px;color:var(--gold-lt)">${it.product} ×${it.qty}</span>`).join('')}
+                </div>`
+              : '';
+
+            return `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;margin-bottom:6px;background:rgba(0,0,0,0.2);border-radius:8px;flex-wrap:wrap">
               <div style="flex:1;min-width:0">
-                <div style="font-size:13px;font-weight:700;color:var(--white)">${w.customer} <span style="color:var(--white-dim);font-weight:400">· ${w.product} ×${w.qty}</span></div>
-                <div style="font-size:11px;color:var(--gold)">${fmtMoney(w.total)} &nbsp;·&nbsp; ${w.payment} &nbsp;·&nbsp; ${w.date} &nbsp;·&nbsp; <span style="color:var(--white-dim)">${w.byName||w.by}</span></div>
+                <div style="font-size:13px;font-weight:700;color:var(--white)">
+                  ${w.customer}
+                  <span style="color:${hasMulti?'var(--gold)':'var(--white-dim)'};font-weight:${hasMulti?'700':'400'}">
+                    · ${hasMulti ? `${w.items.length} የተለያዩ ምርቶች (${w.qty} ቁ.)` : `${w.product} ×${w.qty}`}
+                  </span>
+                </div>
+                ${itemBadges}
+                <div style="font-size:11px;color:var(--gold);margin-top:2px">${fmtMoney(w.total)} &nbsp;·&nbsp; ${w.payment} &nbsp;·&nbsp; ${w.date} &nbsp;·&nbsp; <span style="color:var(--white-dim)">${w.byName||w.by}</span></div>
                 ${w.note ? `<div style="font-size:11px;color:rgba(197,203,216,0.45);margin-top:1px">💬 ${w.note}</div>` : ''}
               </div>
               <div style="display:flex;gap:5px;flex-shrink:0">
                 <button onclick="approveWholesale('${w.id}')" style="padding:5px 12px;border-radius:7px;border:1px solid rgba(76,175,80,0.5);background:rgba(76,175,80,0.12);color:#80e080;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">✅ ${lang==='am'?'አፅድቅ':'Approve'}</button>
                 <button onclick="rejectWholesale('${w.id}')" style="padding:5px 10px;border-radius:7px;border:1px solid rgba(224,90,90,0.4);background:rgba(224,90,90,0.1);color:#FF9090;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">❌</button>
               </div>
-            </div>`).join('')}
+            </div>`;
+          }).join('')}
         </div>`;
     } else {
       queueEl.innerHTML = '';
@@ -7045,10 +7569,15 @@ function renderWholesale() {
     const sl = SL[w.status] || w.status;
     const br = branches.find(b => b.id === w.branch);
     const badge = `<span style="font-size:10px;font-weight:700;color:${sc};background:${sc}18;padding:2px 8px;border-radius:5px;border:1px solid ${sc}44">${sl}</span>`;
+    const hasMulti = w.items && w.items.length > 1;
+
     return `<tr>
       <td style="white-space:nowrap">${w.date}</td>
       <td><div style="font-weight:600;color:var(--white)">${w.customer}</div>${w.phone?`<div style="font-size:10px;color:var(--white-dim)">${w.phone}</div>`:''}</td>
-      <td style="font-weight:600">${w.product}</td>
+      <td style="font-weight:600">
+        <div>${w.product}</div>
+        ${hasMulti ? `<div style="font-size:10px;color:var(--gold)">(${w.items.length} የተለያዩ ዓይነቶች)</div>` : ''}
+      </td>
       <td style="text-align:center;font-weight:700;color:var(--gold)">${w.qty}</td>
       <td>${fmtMoney(w.price)}</td>
       <td style="font-weight:700;color:var(--gold)">${fmtMoney(w.total)}</td>
@@ -7071,14 +7600,18 @@ function posWholesaleInit() {
       .map(p => `<option value="${p.type}">${p.type} (${stockMap[p.type]||0} ቁ.)</option>`)
       .join('') || `<option value="">${lang==='am'?'ክምችት የለም':'No stock'}</option>`;
   }
-  // clear fields
+  // clear inputs
   ['posWsCustomer','posWsPhone','posWsQty','posWsNote','posWsTransferVia'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const pm = document.getElementById('posWsPayment'); if (pm) pm.value = 'cash';
   posWsTogglePayment();
   posWsUpdatePrice();
-  const tot = document.getElementById('posWsTotal'); if (tot) tot.textContent = '—';
+
+  // Reset POS items array & table
+  posWsItems = [];
+  posWsRenderItems();
+
   posWsRenderPending();
 }
 
@@ -7106,14 +7639,6 @@ function posWsUpdatePrice() {
     }
   }
   if (hidden) hidden.value = wholesale || '';
-  posWsUpdateTotal();
-}
-
-function posWsUpdateTotal() {
-  const qty   = parseFloat(document.getElementById('posWsQty')?.value)   || 0;
-  const price = parseFloat(document.getElementById('posWsPrice')?.value) || 0;
-  const el = document.getElementById('posWsTotal');
-  if (el) el.textContent = qty && price ? fmtMoney(qty * price) : '—';
 }
 
 function posWsTogglePayment() {
@@ -7122,48 +7647,215 @@ function posWsTogglePayment() {
   if (row) row.style.display = pm === 'transfer' ? 'block' : 'none';
 }
 
-function posSubmitWholesale() {
+function posWsAddItem() {
+  const product = document.getElementById('posWsProduct')?.value;
+  const qty     = parseInt(document.getElementById('posWsQty')?.value);
+  const price   = parseFloat(document.getElementById('posWsPrice')?.value);
+
+  if (!product) {
+    toast(lang==='am'?'እባክዎ ምርት ይምረጡ':'Please select a product', 'error'); return;
+  }
+  if (!qty || qty <= 0) {
+    toast(lang==='am'?'ትክክለኛ ብዛት ያስገቡ':'Enter a valid quantity', 'error'); return;
+  }
+  if (!price || price <= 0) {
+    toast(lang==='am'?'ኦነሩ የጅምላ ዋጋ ገና አላስቀመጠም':'Owner has not set a wholesale price for this product', 'error'); return;
+  }
+
+  const stockMap = getBranchStockMap(currentUser.branch);
+  const stock = stockMap[product] || 0;
+  const existing = posWsItems.find(x => x.product === product);
+  const currentQty = existing ? existing.qty : 0;
+
+  if (currentQty + qty > stock) {
+    toast(`${product}: ${lang==='am'?'በቂ ክምችት የለም (የቀረው':'Insufficient stock (Remaining'}: ${stock})`, 'error');
+    return;
+  }
+
+  if (existing) {
+    existing.qty += qty;
+    existing.total = existing.qty * existing.price;
+  } else {
+    posWsItems.push({
+      product,
+      qty,
+      price,
+      total: qty * price,
+      stock
+    });
+  }
+
+  const qInp = document.getElementById('posWsQty');
+  if (qInp) qInp.value = '';
+  posWsRenderItems();
+  toast(lang==='am'?`➕ ${product} ተጨምሯል`:`➕ ${product} added`);
+}
+
+function posWsRemoveItem(idx) {
+  posWsItems.splice(idx, 1);
+  posWsRenderItems();
+}
+
+function posWsChangeQty(idx, val) {
+  const n = parseInt(val) || 0;
+  if (n <= 0) {
+    posWsRemoveItem(idx);
+    return;
+  }
+  const item = posWsItems[idx];
+  if (!item) return;
+  if (n > item.stock) {
+    toast(`${item.product}: ${lang==='am'?'ያለው ክምችት':'Available stock'}: ${item.stock}`, 'error');
+    posWsRenderItems();
+    return;
+  }
+  item.qty = n;
+  item.total = n * item.price;
+  posWsRenderItems();
+}
+
+function posWsRenderItems() {
+  const tbody = document.getElementById('posWsItemsTbody');
+  const cntEl = document.getElementById('posWsItemsCount');
+  const pcsEl = document.getElementById('posWsTotalPieces');
+  const totEl = document.getElementById('posWsTotal');
+
+  const totalPieces = posWsItems.reduce((s, it) => s + it.qty, 0);
+  const grandTotal  = posWsItems.reduce((s, it) => s + it.total, 0);
+
+  if (cntEl) cntEl.textContent = posWsItems.length;
+  if (pcsEl) pcsEl.textContent = totalPieces;
+  if (totEl) totEl.textContent = totalPieces > 0 ? fmtMoney(grandTotal) : '—';
+
+  if (!tbody) return;
+  if (!posWsItems.length) {
+    tbody.innerHTML = `<tr>
+      <td colspan="6" style="text-align:center;padding:16px;color:rgba(197,203,216,0.45);font-size:11.5px">
+        🛒 ምንም የተመረጠ ምርት የለም — ከላይ ምርት ይጨምሩ ወይም "በጅምላ ምረጥ" የሚለውን ይጫኑ
+      </td>
+    </tr>`;
+    return;
+  }
+
+  tbody.innerHTML = posWsItems.map((it, idx) => {
+    const isExceeded = it.qty > it.stock;
+    const stockColor = isExceeded ? '#FF9090' : (it.stock > 10 ? '#80e080' : '#FFA726');
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);background:${idx%2===0?'rgba(255,255,255,0.015)':'transparent'}">
+      <td style="padding:6px 10px;font-weight:600;color:var(--white)">
+        <div>${it.product}</div>
+        ${isExceeded ? `<div style="font-size:9.5px;color:#FF9090">⚠️ ክምችት አልቋል!</div>` : ''}
+      </td>
+      <td style="padding:6px;text-align:center;color:${stockColor};font-weight:600">${it.stock}</td>
+      <td style="padding:6px;text-align:center">
+        <input type="number" min="1" max="${it.stock}" value="${it.qty}" onchange="posWsChangeQty(${idx}, this.value)"
+          style="width:58px;padding:3px 6px;text-align:center;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;font-size:11.5px">
+      </td>
+      <td style="padding:6px 8px;text-align:right;color:#4FC3F7">${fmtMoney(it.price)}</td>
+      <td style="padding:6px 10px;text-align:right;font-weight:700;color:var(--gold)">${fmtMoney(it.total)}</td>
+      <td style="padding:6px;text-align:center">
+        <button type="button" onclick="posWsRemoveItem(${idx})" style="background:transparent;border:none;color:#FF9090;cursor:pointer;font-size:14px;padding:2px 5px" title="አስወግድ">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function posSubmitWholesale(btn) {
+  if (btn && btn.disabled) return;
   const customer   = document.getElementById('posWsCustomer')?.value.trim();
   const phone      = document.getElementById('posWsPhone')?.value.trim();
-  const product    = document.getElementById('posWsProduct')?.value;
-  const qty        = parseInt(document.getElementById('posWsQty')?.value);
-  const price      = parseFloat(document.getElementById('posWsPrice')?.value);
   const payment    = document.getElementById('posWsPayment')?.value || 'cash';
   const transferVia= document.getElementById('posWsTransferVia')?.value.trim();
   const note       = document.getElementById('posWsNote')?.value.trim();
   const date       = new Date().toISOString().slice(0,10);
   const branch     = currentUser.branch;
 
-  if (!customer || !product || !qty) {
-    toast(lang==='am'?'ሁሉንም ሙሉ':'Fill required fields','error'); return;
+  if (!customer) {
+    toast(lang==='am'?'እባክዎ የደንበኛ ስም ያስገቡ':'Please enter customer name', 'error'); return;
   }
-  if (!price || price <= 0) {
-    toast(lang==='am'?'ኦነሩ የጅምላ ዋጋ ገና አላስቀመጠም':'Owner has not set a wholesale price for this product','error'); return;
+
+  // If user typed in single add fields without clicking "+ አክል", auto-add it
+  if (!posWsItems.length) {
+    const singleProd  = document.getElementById('posWsProduct')?.value;
+    const singleQty   = parseInt(document.getElementById('posWsQty')?.value);
+    const singlePrice = parseFloat(document.getElementById('posWsPrice')?.value);
+    if (singleProd && singleQty > 0 && singlePrice > 0) {
+      const stockMap = getBranchStockMap(branch);
+      const stock = stockMap[singleProd] || 0;
+      if (singleQty > stock) {
+        toast(`${singleProd}: ${lang==='am'?'ክምችት አልቋል':'Insufficient stock'}`, 'error'); return;
+      }
+      posWsItems.push({
+        product: singleProd,
+        qty: singleQty,
+        price: singlePrice,
+        total: singleQty * singlePrice,
+        stock
+      });
+      posWsRenderItems();
+    }
   }
+
+  if (!posWsItems.length) {
+    toast(lang==='am'?'እባክዎ የሚሸጡትን ምርቶች ይምረጡ':'Please select products to sell', 'error'); return;
+  }
+
   if (payment === 'transfer' && !transferVia) {
     toast(lang==='am'?'ባንክ/ቻናል ያስፈልጋል':'Bank/channel required','error'); return;
   }
+
+  // Re-verify branch stock for each item
   const stockMap = getBranchStockMap(branch);
-  if ((stockMap[product]||0) < qty) {
-    toast(`${product}: ${lang==='am'?'ክምችት አልቋል':'Insufficient stock'}`, 'error'); return;
+  for (const it of posWsItems) {
+    const avail = stockMap[it.product] || 0;
+    if (it.qty > avail) {
+      toast(`${it.product}: ${lang==='am'?'ክምችት አልቋል (ያለው':'Insufficient stock (available'}: ${avail})`, 'error');
+      return;
+    }
   }
+
+  const grandTotal = posWsItems.reduce((s, it) => s + it.total, 0);
+  const totalPieces = posWsItems.reduce((s, it) => s + it.qty, 0);
+  const avgPrice = Math.round(grandTotal / (totalPieces || 1));
+  const productSummary = posWsItems.length === 1
+    ? posWsItems[0].product
+    : posWsItems.map(it => `${it.product} (${it.qty})`).join(', ');
 
   const wholesale = getData('wholesale');
   wholesale.push({
-    id: uid(), date, customer, phone: phone||'', product, qty, price,
-    total: qty * price, payment, transferVia: transferVia||'',
-    note: note||'', branch,
-    by: currentUser.username, byName: currentUser.name||currentUser.username,
-    status: 'pending', createdAt: new Date().toISOString()
+    id: uid(),
+    date,
+    customer,
+    phone: phone || '',
+    items: posWsItems.map(it => ({
+      product: it.product,
+      qty: it.qty,
+      price: it.price,
+      total: it.total
+    })),
+    product: productSummary,
+    qty: totalPieces,
+    price: avgPrice,
+    total: grandTotal,
+    payment,
+    transferVia: transferVia || '',
+    note: note || '',
+    branch,
+    by: currentUser.username,
+    byName: currentUser.name || currentUser.username,
+    status: 'pending',
+    createdAt: new Date().toISOString()
   });
+
   saveData('wholesale', wholesale);
   buildSidebar();
   renderDashboard();
+
   // reset form
   ['posWsCustomer','posWsPhone','posWsQty','posWsNote','posWsTransferVia'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
-  const tot = document.getElementById('posWsTotal'); if (tot) tot.textContent = '—';
+  posWsItems = [];
+  posWsRenderItems();
   posWsRenderPending();
   toast(lang==='am'?'⏳ ጅምላ ሽያጭ ለኦነር ተልኳል':'⏳ Wholesale sent for owner approval');
 }
@@ -7182,9 +7874,15 @@ function posWsRenderPending() {
     <div style="font-size:11px;font-weight:700;color:var(--white-dim);margin-bottom:8px;letter-spacing:0.5px">📋 ${lang==='am'?'የቅርብ ጊዜ ጅምላ ሽያጮች':'Recent Wholesale Sales'}</div>
     ${mine.map(w => {
       const sc = SC[w.status]||'#aaa';
+      const hasMulti = w.items && w.items.length > 1;
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;margin-bottom:5px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;gap:8px;flex-wrap:wrap">
         <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:700;color:var(--white)">${w.customer} <span style="font-weight:400;color:var(--white-dim)">· ${w.product} ×${w.qty}</span></div>
+          <div style="font-size:12px;font-weight:700;color:var(--white)">
+            ${w.customer}
+            <span style="font-weight:${hasMulti?'700':'400'};color:${hasMulti?'var(--gold)':'var(--white-dim)'}">
+              · ${hasMulti ? `${w.items.length} የተለያዩ ምርቶች (${w.qty} ቁ.)` : `${w.product} ×${w.qty}`}
+            </span>
+          </div>
           <div style="font-size:11px;color:var(--gold)">${fmtMoney(w.total)} · ${w.date}</div>
         </div>
         <span style="font-size:10px;font-weight:700;color:${sc};background:${sc}18;padding:2px 8px;border-radius:5px;border:1px solid ${sc}44;white-space:nowrap">${SL[w.status]||w.status}</span>
@@ -8403,12 +9101,19 @@ function approveBranchLoan(id) {
   const loans = getData('branchLoans');
   const ln = loans.find(x => x.id === id);
   if (!ln) return;
+  if (ln.status === 'confirmed') {
+    toast(lang==='am'?'ብድሩ አስቀድሞ ተረጋግጧል':'Loan already confirmed', 'info');
+    return;
+  }
+  if (ln.status !== 'pending_owner') return;
 
   const bs = getData('branchStock');
-  let rem = ln.qty;
+  let rem = Number(ln.qty) || 0;
   for (let i = 0; i < bs.length && rem > 0; i++) {
     if (bs[i].branch === ln.fromBranch && bs[i].type === ln.product) {
-      const d = Math.min(bs[i].qty, rem); bs[i].qty -= d; rem -= d;
+      const d = Math.min(Number(bs[i].qty) || 0, rem);
+      bs[i].qty = Math.max(0, (Number(bs[i].qty) || 0) - d);
+      rem -= d;
     }
   }
   if (rem > 0) {
@@ -8431,6 +9136,10 @@ function rejectBranchLoan(id) {
   const loans = getData('branchLoans');
   const ln = loans.find(x => x.id === id);
   if (!ln) return;
+  if (ln.status === 'confirmed') {
+    toast(lang==='am'?'የተረጋገጠ ብድር ውድቅ ማድረግ አይቻልም':'Cannot reject an already confirmed loan', 'error');
+    return;
+  }
   ln.status = 'rejected';
   ln.rejectedBy = currentUser.username;
   ln.rejectedAt = new Date().toISOString();
@@ -8446,6 +9155,10 @@ function confirmBranchLoanReceipt(id) {
   const loans = getData('branchLoans');
   const ln = loans.find(x => x.id === id);
   if (!ln) return;
+  if (ln.status === 'confirmed') {
+    toast(lang==='am'?'ይህ ብድር አስቀድሞ ተረጋግጧል':'Loan already confirmed', 'info');
+    return;
+  }
 
   if (currentUser.role !== 'sales' || currentUser.branch !== ln.toBranch) {
     toast(lang==='am'?'⛔ ይህን ለማረጋገጥ ፈቃድ የለዎትም':'⛔ Only the receiving branch can confirm this','error');
@@ -8453,9 +9166,11 @@ function confirmBranchLoanReceipt(id) {
   }
 
   const bs = getData('branchStock');
+  const addQty = Number(ln.qty) || 0;
+  if (addQty <= 0) return;
   const existing = bs.find(x => x.branch === ln.toBranch && x.type === ln.product);
-  if (existing) existing.qty += ln.qty;
-  else bs.push({ id: uid(), branch: ln.toBranch, type: ln.product, qty: ln.qty });
+  if (existing) existing.qty = Math.max(0, (Number(existing.qty) || 0) + addQty);
+  else bs.push({ id: uid(), branch: ln.toBranch, type: ln.product, qty: addQty });
   saveData('branchStock', bs);
 
   ln.status = 'confirmed';
@@ -9627,6 +10342,241 @@ function rejectProdFlowTransfer(id) {
   returnProdFlowTransfer(id);
 }
 
+// ── SHOP RECEIVED GOODS LOG (ሱቆች ላይ ገቢ የሆነ እቃ ዝርዝር መቼ ምንያህል ገባ) ───────
+function renderShopReceivedGoods(containerId, branchFilter) {
+  const targetId = containerId || 'shopReceivedGoodsSection';
+  const container = document.getElementById(targetId);
+  if (!container) return;
+
+  const isOwner = currentUser.role === 'owner';
+  const myBranch = currentUser.branch;
+  const branchSelectEl = document.getElementById(`${targetId}_branchFilter`);
+  const activeBranch = branchFilter || (isOwner ? (branchSelectEl ? branchSelectEl.value : 'all') : myBranch);
+  const searchTerm = (document.getElementById(`${targetId}_search`)?.value || '').trim().toLowerCase();
+  const statusFilter = document.getElementById(`${targetId}_statusFilter`)?.value || 'all';
+
+  const branches = getData('branches');
+  let transfers = getData('storeTransfers') || [];
+
+  // Filter transfers for destination branch
+  if (activeBranch !== 'all') {
+    transfers = transfers.filter(t => t.branch === activeBranch);
+  }
+
+  // Filter by status if specified: 'all', 'confirmed', 'pending_receiver', 'pending_owner'
+  if (statusFilter !== 'all') {
+    transfers = transfers.filter(t => t.status === statusFilter);
+  }
+
+  // Search filter
+  if (searchTerm) {
+    transfers = transfers.filter(t => {
+      const typeStr = (t.items && t.items.length) ? t.items.map(it => it.type).join(' ') : (t.type || '');
+      const carrierStr = t.carrier || '';
+      const sentStr = t.sentByName || t.sentBy || '';
+      const recStr = t.receivedByName || t.receivedBy || '';
+      const dateStr = (t.receivedAt || t.date || '');
+      const noteStr = t.note || '';
+      const str = `${typeStr} ${carrierStr} ${sentStr} ${recStr} ${dateStr} ${noteStr}`.toLowerCase();
+      return str.includes(searchTerm);
+    });
+  }
+
+  // Sort descending by receivedAt or createdAt or date
+  transfers.sort((a, b) => {
+    const timeA = a.receivedAt || a.createdAt || a.date || '';
+    const timeB = b.receivedAt || b.createdAt || b.date || '';
+    return timeB.localeCompare(timeA);
+  });
+
+  // Calculate totals
+  const getTransferTotalQty = (t) => {
+    if (t.items && t.items.length) {
+      return t.items.reduce((sum, it) => sum + (Number(it.qty) || 0), 0);
+    }
+    return Number(t.qty) || 0;
+  };
+
+  const totalReceivedPcs = transfers.filter(t => t.status === 'confirmed').reduce((sum, t) => sum + getTransferTotalQty(t), 0);
+  const pendingPcs = transfers.filter(t => t.status === 'pending_receiver' || t.status === 'pending_owner').reduce((sum, t) => sum + getTransferTotalQty(t), 0);
+  const confirmedCount = transfers.filter(t => t.status === 'confirmed').length;
+  const inTransitCount = transfers.filter(t => t.status === 'pending_receiver').length;
+
+  const branchObj = branches.find(b => b.id === activeBranch);
+  const branchTitle = activeBranch === 'all'
+    ? (lang === 'am' ? 'ሁሉንም ሱቆች' : 'All Shops')
+    : (branchObj ? branchObj.name : activeBranch);
+
+  const bodyEl = document.getElementById(`${targetId}_body`);
+  const isCurrentlyOpen = bodyEl ? bodyEl.style.display !== 'none' : true;
+  const isDash = targetId.startsWith('dash') || targetId.startsWith('bRec_');
+
+  // Format date and time
+  const formatDateTime = (isoStr, fallbackDate) => {
+    if (!isoStr && fallbackDate) return fallbackDate;
+    if (!isoStr) return '—';
+    try {
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return isoStr;
+      const datePart = d.toISOString().slice(0, 10);
+      let hours = d.getHours();
+      const mins = d.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? (lang==='am'?'ከሰዓት':'PM') : (lang==='am'?'ጥዋት':'AM');
+      hours = hours % 12 || 12;
+      return `${datePart} ${hours}:${mins} ${ampm}`;
+    } catch (e) {
+      return isoStr;
+    }
+  };
+
+  const SC = { pending_owner: '#FFA726', pending_receiver: '#4FC3F7', confirmed: '#4CAF50', rejected: '#E05A5A' };
+  const SL = {
+    pending_owner: lang === 'am' ? '⏳ ፈቃድ ይጠበቃል' : '⏳ Pending Owner',
+    pending_receiver: lang === 'am' ? '🚚 በመንገድ ላይ' : '🚚 In-Transit',
+    confirmed: lang === 'am' ? '✅ ገብቷል' : '✅ Confirmed',
+    rejected: lang === 'am' ? '❌ ውድቅ' : '❌ Rejected'
+  };
+
+  const branchOptions = branches.map(b => `<option value="${b.id}" ${activeBranch===b.id?'selected':''}>🏪 ${b.name}</option>`).join('');
+
+  const rows = transfers.length ? transfers.map(t => {
+    const br = branches.find(b => b.id === t.branch);
+    const branchName = br ? br.name : t.branch || '—';
+    const totalQty = getTransferTotalQty(t);
+    const timeDisplay = t.status === 'confirmed' ? formatDateTime(t.receivedAt, t.date) : formatDateTime(t.createdAt, t.date);
+    const sc = SC[t.status] || '#aaa';
+    const sl = SL[t.status] || t.status;
+
+    let itemsHTML = '';
+    if (t.items && t.items.length) {
+      itemsHTML = t.items.map(it => `<span style="display:inline-block;padding:2px 7px;margin:2px 3px 2px 0;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.25);border-radius:6px;font-size:11px;color:var(--gold);font-weight:700">📦 ${it.type} <b style="color:var(--white)">×${it.qty}</b></span>`).join('');
+    } else {
+      itemsHTML = `<span style="display:inline-block;padding:2px 7px;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.25);border-radius:6px;font-size:11px;color:var(--gold);font-weight:700">📦 ${t.type||'—'} <b style="color:var(--white)">×${t.qty||0}</b></span>`;
+    }
+
+    let actionBtn = '';
+    const canConfirm = (currentUser.role === 'sales' && currentUser.branch === t.branch) || currentUser.role === 'owner';
+    if (t.status === 'pending_receiver' && canConfirm) {
+      actionBtn = `<button onclick="confirmStoreTransferReceipt('${t.id}', this)" style="padding:4px 9px;border-radius:6px;border:1px solid rgba(79,195,247,0.5);background:rgba(79,195,247,0.15);color:#4FC3F7;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">📦 ${lang==='am'?'ተቀበልኩ':'Receive'}</button>`;
+    }
+
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+      <td style="padding:8px 6px;white-space:nowrap;font-size:11.5px;color:var(--white-dim)">
+        <div style="font-weight:700;color:var(--white)">${timeDisplay}</div>
+        <div style="font-size:10px;opacity:0.6">${t.status==='confirmed'?(lang==='am'?'የገባበት ሰዓት':'Received at'):(lang==='am'?'የተላከበት':'Sent at')}</div>
+      </td>
+      ${activeBranch === 'all' ? `<td style="padding:8px 6px;white-space:nowrap;font-weight:700;color:var(--white);font-size:12px">🏪 ${branchName}</td>` : ''}
+      <td style="padding:8px 6px">${itemsHTML}</td>
+      <td style="padding:8px 6px;text-align:center">
+        <span style="display:inline-block;font-size:13px;font-weight:800;color:var(--gold);background:rgba(201,168,76,0.12);padding:2px 8px;border-radius:6px;border:1px solid rgba(201,168,76,0.3)">${totalQty} ${lang==='am'?'ቁ.':'pcs'}</span>
+      </td>
+      <td style="padding:8px 6px;font-size:11px;color:var(--white-dim);white-space:nowrap">
+        <div>📤 ${t.sentByName || t.sentBy || '—'}</div>
+        <div style="font-size:10px;color:rgba(197,203,216,0.6)">🚗 ${t.carrier || '—'}</div>
+      </td>
+      <td style="padding:8px 6px;font-size:11.5px;color:#80e080;font-weight:600;white-space:nowrap">
+        ${t.status === 'confirmed' ? `👤 ${t.receivedByName || t.receivedBy || '—'}` : `<span style="color:rgba(197,203,216,0.4)">—</span>`}
+      </td>
+      <td style="padding:8px 6px;text-align:center;white-space:nowrap">
+        <span style="font-size:10.5px;font-weight:700;color:${sc};background:${sc}18;padding:2px 8px;border-radius:6px;border:1px solid ${sc}44;display:inline-block">${sl}</span>
+        ${actionBtn ? `<div style="margin-top:4px">${actionBtn}</div>` : ''}
+      </td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="${activeBranch==='all'?7:6}" style="text-align:center;padding:20px;color:var(--white-dim);font-size:12px">📥 ${lang==='am'?'ምንም ገቢ የሆነ እቃ አልተገኘም':'No received goods found'}</td></tr>`;
+
+  container.innerHTML = `
+    <div style="background:rgba(255,255,255,0.02);border:1.5px solid rgba(76,175,80,0.35);border-radius:12px;padding:14px;margin-bottom:16px">
+      <!-- Header Banner -->
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:${isDash?'pointer':'default'}" ${isDash?`onclick="toggleDashboardReport('${targetId}')"`:''}>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:24px">📥</span>
+          <div>
+            <h3 style="margin:0;color:#80e080;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              ${lang==='am'?'ሱቆች ላይ ገቢ የሆነ እቃ ዝርዝር (መቼ እና ምን ያህል ገባ)':'Shop Received Goods Log (When & How Much)'}
+              <span style="font-size:12px;font-weight:700;color:var(--gold);background:rgba(201,168,76,0.12);padding:2px 8px;border-radius:8px;border:1px solid rgba(201,168,76,0.3)">
+                ${totalReceivedPcs} ${lang==='am'?'ቁጥር ገብቷል':'pcs confirmed'}
+              </span>
+            </h3>
+            <div style="font-size:11px;color:var(--white-dim);margin-top:2px">
+              ${lang==='am'?`የሱቁ የገቡ እቃዎች ዝርዝር፣ መቼ እንደገባ፣ መጠኑ፣ አጓጓዡ እና ሁኔታው`:`Incoming inventory records showing arrival date/time, quantities, carrier, and receiver`}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${isDash ? `<button id="${targetId}_btn" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:var(--white);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">${isCurrentlyOpen?(lang==='am'?'ሰብስብ ▲':'Collapse ▲'):(lang==='am'?'ዝርዝር ይመልከቱ ▾':'View details ▾')}</button>` : `<button class="btn-gold" onclick="window.print()" style="font-size:12px;padding:5px 12px">🖨️ Print</button>`}
+        </div>
+      </div>
+
+      <!-- Collapsible Body -->
+      <div id="${targetId}_body" style="display:${isCurrentlyOpen?'block':'none'};margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
+        
+        <!-- Quick KPI Cards -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:8px;margin-bottom:14px">
+          <div style="padding:10px;background:rgba(76,175,80,0.08);border:1px solid rgba(76,175,80,0.25);border-radius:8px;text-align:center">
+            <div style="font-size:10px;color:#80e080;font-weight:700">${lang==='am'?'የገቡ አልባሳት':'Total Confirmed Pcs'}</div>
+            <div style="font-size:18px;font-weight:800;color:#80e080;margin-top:2px">${totalReceivedPcs}</div>
+          </div>
+          <div style="padding:10px;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.25);border-radius:8px;text-align:center">
+            <div style="font-size:10px;color:var(--gold);font-weight:700">${lang==='am'?'የዝውውር ዙሮች':'Confirmed Batches'}</div>
+            <div style="font-size:18px;font-weight:800;color:var(--gold);margin-top:2px">${confirmedCount}</div>
+          </div>
+          <div style="padding:10px;background:rgba(79,195,247,0.08);border:1px solid rgba(79,195,247,0.25);border-radius:8px;text-align:center">
+            <div style="font-size:10px;color:#4FC3F7;font-weight:700">${lang==='am'?'በመንገድ ላይ ያሉ':'In-Transit Pcs'}</div>
+            <div style="font-size:18px;font-weight:800;color:#4FC3F7;margin-top:2px">${pendingPcs} <small style="font-size:11px">(${inTransitCount} ${lang==='am'?'ጭነት':'batches'})</small></div>
+          </div>
+        </div>
+
+        <!-- Filters Bar -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:10px;background:rgba(0,0,0,0.2);border-radius:8px;align-items:center">
+          ${(isOwner && !branchFilter) ? `
+          <div style="flex:1;min-width:130px">
+            <div style="font-size:10px;color:rgba(197,203,216,0.5);margin-bottom:3px;font-weight:600">${lang==='am'?'ሱቅ / ቅርንጫፍ':'Shop / Branch'}</div>
+            <select id="${targetId}_branchFilter" onchange="renderShopReceivedGoods('${targetId}')" style="width:100%;padding:6px 8px;background:#0f1420;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--white);font-size:12px">
+              <option value="all">${lang==='am'?'🏪 ሁሉም ሱቆች':'All Shops'}</option>
+              ${branchOptions}
+            </select>
+          </div>` : ''}
+
+          <div style="flex:1;min-width:120px">
+            <div style="font-size:10px;color:rgba(197,203,216,0.5);margin-bottom:3px;font-weight:600">${lang==='am'?'ሁኔታ':'Status'}</div>
+            <select id="${targetId}_statusFilter" onchange="renderShopReceivedGoods('${targetId}', '${branchFilter||''}')" style="width:100%;padding:6px 8px;background:#0f1420;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--white);font-size:12px">
+              <option value="all">${lang==='am'?'ሁሉንም':'All'}</option>
+              <option value="confirmed" ${statusFilter==='confirmed'?'selected':''}>✅ ${lang==='am'?'ገብቷል (ተቀብሏል)':'Confirmed'}</option>
+              <option value="pending_receiver" ${statusFilter==='pending_receiver'?'selected':''}>🚚 ${lang==='am'?'በመንገድ ላይ':'In-Transit'}</option>
+              <option value="pending_owner" ${statusFilter==='pending_owner'?'selected':''}>⏳ ${lang==='am'?'ፈቃድ ይጠበቃል':'Pending Approval'}</option>
+            </select>
+          </div>
+
+          <div style="flex:2;min-width:160px">
+            <div style="font-size:10px;color:rgba(197,203,216,0.5);margin-bottom:3px;font-weight:600">${lang==='am'?'ፈልግ (እቃ፣ አጓጓዥ፣ ቀን...)':'Search (item, carrier, date...)'}</div>
+            <input type="text" id="${targetId}_search" value="${searchTerm}" oninput="renderShopReceivedGoods('${targetId}', '${branchFilter||''}')" placeholder="${lang==='am'?'በእቃ ዓይነት፣ ቀን፣ አጓጓዥ ፈልግ...':'Search by item, date, carrier...'}" style="width:100%;padding:6px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--white);font-size:12px" />
+          </div>
+        </div>
+
+        <!-- Detail Table -->
+        <div style="overflow-x:auto;max-height:360px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.12);color:rgba(197,203,216,0.6);text-align:left">
+                <th style="padding:7px 6px">${lang==='am'?'መቼ ገባ (ቀንና ሰዓት)':'Date & Time'}</th>
+                ${activeBranch === 'all' ? `<th style="padding:7px 6px">${lang==='am'?'ሱቅ':'Shop'}</th>` : ''}
+                <th style="padding:7px 6px">${lang==='am'?'የገባው እቃ አይነት':'Item(s)'}</th>
+                <th style="padding:7px 6px;text-align:center">${lang==='am'?'ምን ያህል (ብዛት)':'Qty (Pcs)'}</th>
+                <th style="padding:7px 6px">${lang==='am'?'የላከ / አጓጓዥ':'Sent By / Carrier'}</th>
+                <th style="padding:7px 6px">${lang==='am'?'የተቀበለው ሰው':'Received By'}</th>
+                <th style="padding:7px 6px;text-align:center">${lang==='am'?'ሁኔታ':'Status'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>`;
+}
+
 // ── OWNER REFUND REPORT ──────────────────────────────────────────
 function renderOwnerRefundReport(containerId) {
   const targetId = containerId || 'ownerRefundReportContainer';
@@ -9645,10 +10595,10 @@ function renderOwnerRefundReport(containerId) {
   }
 
   const branches = getData('branches');
-  const selectedBranch = document.getElementById('orrBranchFilter')?.value || 'all';
-  const startDate = document.getElementById('orrStartDate')?.value || '';
-  const endDate = document.getElementById('orrEndDate')?.value || '';
-  const selectedType = document.getElementById('orrTypeFilter')?.value || 'all';
+  const selectedBranch = document.getElementById(`${targetId}_orrBranchFilter`)?.value || 'all';
+  const startDate = document.getElementById(`${targetId}_orrStartDate`)?.value || '';
+  const endDate = document.getElementById(`${targetId}_orrEndDate`)?.value || '';
+  const selectedType = document.getElementById(`${targetId}_orrTypeFilter`)?.value || 'all';
 
   let filtered = [...refunds];
   if (selectedBranch !== 'all') filtered = filtered.filter(r => r.branch === selectedBranch);
@@ -9689,22 +10639,22 @@ function renderOwnerRefundReport(containerId) {
           ${isOwner ? `
           <div style="flex:1;min-width:130px">
             <div style="font-size:10px;color:rgba(197,203,216,0.5);margin-bottom:3px;font-weight:600">${lang==='am'?'ቅርንጫፍ':'Branch'}</div>
-            <select id="orrBranchFilter" onchange="renderOwnerRefundReport('${targetId}')" style="width:100%;padding:7px;background:#0f1420;border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--white);font-size:12px">
+            <select id="${targetId}_orrBranchFilter" onchange="renderOwnerRefundReport('${targetId}')" style="width:100%;padding:7px;background:#0f1420;border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--white);font-size:12px">
               <option value="all">${lang==='am'?'ሁሉንም ቅርንጫፎች':'All Branches'}</option>
               ${branchOptions}
             </select>
           </div>` : ''}
           <div style="flex:1;min-width:110px">
             <div style="font-size:10px;color:rgba(197,203,216,0.5);margin-bottom:3px;font-weight:600">${lang==='am'?'ከ ቀን':'From Date'}</div>
-            <input type="date" id="orrStartDate" value="${startDate}" onchange="renderOwnerRefundReport('${targetId}')" style="width:100%;padding:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--white);font-size:12px" />
+            <input type="date" id="${targetId}_orrStartDate" value="${startDate}" onchange="renderOwnerRefundReport('${targetId}')" style="width:100%;padding:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--white);font-size:12px" />
           </div>
           <div style="flex:1;min-width:110px">
             <div style="font-size:10px;color:rgba(197,203,216,0.5);margin-bottom:3px;font-weight:600">${lang==='am'?'እስከ ቀን':'To Date'}</div>
-            <input type="date" id="orrEndDate" value="${endDate}" onchange="renderOwnerRefundReport('${targetId}')" style="width:100%;padding:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--white);font-size:12px" />
+            <input type="date" id="${targetId}_orrEndDate" value="${endDate}" onchange="renderOwnerRefundReport('${targetId}')" style="width:100%;padding:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--white);font-size:12px" />
           </div>
           <div style="flex:1;min-width:120px">
             <div style="font-size:10px;color:rgba(197,203,216,0.5);margin-bottom:3px;font-weight:600">${lang==='am'?'ዓይነት':'Type'}</div>
-            <select id="orrTypeFilter" onchange="renderOwnerRefundReport('${targetId}')" style="width:100%;padding:7px;background:#0f1420;border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--white);font-size:12px">
+            <select id="${targetId}_orrTypeFilter" onchange="renderOwnerRefundReport('${targetId}')" style="width:100%;padding:7px;background:#0f1420;border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--white);font-size:12px">
               <option value="all">${lang==='am'?'ሁሉንም':'All Types'}</option>
               <option value="money" ${selectedType==='money'?'selected':''}>💵 ${lang==='am'?'ገንዘብ ተመላሽ':'Money Refund'}</option>
               <option value="exchange" ${selectedType==='exchange'?'selected':''}>🔄 ${lang==='am'?'የዕቃ ቅያሬ':'Item Exchange'}</option>
@@ -9774,7 +10724,7 @@ function renderOwnerRefundReport(containerId) {
     </div>`;
 }
 
-// ── PAST DAILY AGGREGATED SUMMARY ────────────────────────────────
+// ── PAST DAILY AGGREGATED SUMMARY (የየእለቱን ሸያጭ ወይም ምርት የተጠቃለለ መረጃ ወደ ኃላ ያለፈን ቀን ለየብቻው) ──
 function renderPastDailySummary(containerId, targetDate) {
   const date = targetDate || new Date().toISOString().slice(0,10);
   const targetId = containerId || 'pastDailySummaryContainer';
@@ -9785,14 +10735,23 @@ function renderPastDailySummary(containerId, targetDate) {
   const bodyEl = document.getElementById(`${targetId}_body`);
   const isCurrentlyOpen = bodyEl ? bodyEl.style.display !== 'none' : !isDash;
 
-  const sales = getData('sales').filter(s => !s.isWholesale && s.date === date);
-  const refunds = getData('refunds').filter(r => r.date === date);
-  const wholesale = getData('wholesale').filter(w => w.status === 'approved' && w.date === date);
-  const cutting = getData('cutting').filter(c => c.date === date);
-  const sewing = getData('sewing').filter(s => s.date === date);
-  const cuttingDmg = getData('cuttingDamage').filter(d => d.date === date);
+  // Data collections
+  const allSales = getData('sales') || [];
+  const allRefunds = getData('refunds') || [];
+  const allWholesale = getData('wholesale') || [];
+  const allCutting = getData('cutting') || [];
+  const allSewing = getData('sewing') || [];
+  const allCuttingDmg = getData('cuttingDamage') || [];
 
-  // Overall Sales Totals
+  // Filtered for the selected date
+  const sales = allSales.filter(s => !s.isWholesale && s.date === date);
+  const refunds = allRefunds.filter(r => r.date === date);
+  const wholesale = allWholesale.filter(w => w.status === 'approved' && w.date === date);
+  const cutting = allCutting.filter(c => c.date === date);
+  const sewing = allSewing.filter(s => s.date === date);
+  const cuttingDmg = allCuttingDmg.filter(d => d.date === date);
+
+  // Overall Sales Totals for selected date
   const retailGross = sales.reduce((a, s) => a + (s.qty * s.price), 0);
   const refundAmt = refunds.reduce((a, r) => a + (r.financialDiff || r.origTotal || 0), 0);
   const wsTotal = wholesale.reduce((a, w) => a + w.total, 0);
@@ -9809,7 +10768,7 @@ function renderPastDailySummary(containerId, targetDate) {
     prodSalesMap[s.product].rev += s.qty * s.price;
   });
 
-  // Production Totals
+  // Production Totals for selected date
   const totalCuttingQty = cutting.reduce((a, c) => a + (c.qty || 0), 0);
   const totalSewingQty = sewing.reduce((a, s) => a + (s.qty || 0), 0);
   const totalSewingDmg = sewing.reduce((a, s) => a + (s.dmgQty || 0), 0) + cuttingDmg.reduce((a, d) => a + (d.qty || 0), 0);
@@ -9820,8 +10779,8 @@ function renderPastDailySummary(containerId, targetDate) {
     deptBreakdown[k] = sewing.filter(s => s.dept === k).reduce((a, s) => a + (s.qty || 0), 0);
   });
 
-  // Per-Shop / Branch Breakdown
-  const branches = getData('branches');
+  // Per-Shop / Branch Breakdown for selected date
+  const branches = getData('branches') || [];
   const salesBranches = branches.filter(b => !b.noSales);
 
   const branchCardsHTML = salesBranches.map(b => {
@@ -9891,42 +10850,134 @@ function renderPastDailySummary(containerId, targetDate) {
       </div>`;
   }).join('');
 
+  // Quick past days selector buttons (ዛሬ, ትናንት, ከ2 ቀን በፊት ... ከ7 ቀን በፊት)
+  const todayObj = new Date();
+  const pastChips = [0, 1, 2, 3, 4, 5, 6, 7].map(offset => {
+    const d = new Date(todayObj);
+    d.setDate(todayObj.getDate() - offset);
+    const dateStr = d.toISOString().slice(0, 10);
+    let label = '';
+    if (offset === 0) label = lang === 'am' ? 'ዛሬ' : 'Today';
+    else if (offset === 1) label = lang === 'am' ? 'ትናንት' : 'Yesterday';
+    else label = lang === 'am' ? `ከ${offset} ቀን በፊት` : `${offset}d ago`;
+    const isSelected = date === dateStr;
+    return `<button onclick="renderPastDailySummary('${targetId}', '${dateStr}')" style="padding:4px 10px;font-size:11px;font-weight:700;border-radius:20px;cursor:pointer;font-family:inherit;transition:all 0.15s;border:${isSelected ? '1.5px solid var(--gold)' : '1px solid rgba(255,255,255,0.12)'};background:${isSelected ? 'rgba(201,168,76,0.25)' : 'rgba(255,255,255,0.04)'};color:${isSelected ? 'var(--gold)' : 'var(--white)'}">
+      ${label} <span style="font-size:9.5px;opacity:0.75;font-weight:normal">(${dateStr.slice(5)})</span>
+    </button>`;
+  }).join('');
+
+  // ── Collect all distinct past dates for the Comprehensive Breakdown Table ──
+  const dateSet = new Set();
+  allSales.forEach(s => { if (s.date) dateSet.add(s.date); });
+  allWholesale.forEach(w => { if (w.date && w.status === 'approved') dateSet.add(w.date); });
+  allRefunds.forEach(r => { if (r.date) dateSet.add(r.date); });
+  allCutting.forEach(c => { if (c.date) dateSet.add(c.date); });
+  allSewing.forEach(s => { if (s.date) dateSet.add(s.date); });
+  dateSet.add(new Date().toISOString().slice(0, 10));
+  dateSet.add(date);
+
+  const allDates = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
+  const dayOfWeekAm = ['እሁድ', 'ሰኞ', 'ማክሰኞ', 'ረቡዕ', 'ሐሙስ', 'አርብ', 'ቅዳሜ'];
+  const dayOfWeekEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  const pastDayRows = allDates.map(dStr => {
+    const isThisSelected = dStr === date;
+    const dObj = new Date(dStr + 'T00:00:00');
+    const dayName = !isNaN(dObj.getDay()) ? (lang === 'am' ? dayOfWeekAm[dObj.getDay()] : dayOfWeekEn[dObj.getDay()]) : '';
+
+    const dSales = allSales.filter(s => !s.isWholesale && s.date === dStr);
+    const dRefunds = allRefunds.filter(r => r.date === dStr);
+    const dWs = allWholesale.filter(w => w.status === 'approved' && w.date === dStr);
+    const dCut = allCutting.filter(c => c.date === dStr);
+    const dSew = allSewing.filter(s => s.date === dStr);
+
+    const dGross = dSales.reduce((a, s) => a + (s.qty * s.price), 0);
+    const dRef = dRefunds.reduce((a, r) => a + (r.financialDiff || r.origTotal || 0), 0);
+    const dWsTot = dWs.reduce((a, w) => a + (w.total || 0), 0);
+    const dNet = Math.max(0, dGross - dRef) + dWsTot;
+    const dPcs = dSales.reduce((a, s) => a + (s.qty || 0), 0);
+    const dCutPcs = dCut.reduce((a, c) => a + (c.qty || 0), 0);
+    const dSewPcs = dSew.reduce((a, s) => a + (s.qty || 0), 0);
+
+    const shopBadges = salesBranches.map(b => {
+      const bGross = dSales.filter(s => s.branch === b.id).reduce((a, s) => a + (s.qty * s.price), 0);
+      const bRef = dRefunds.filter(r => r.branch === b.id).reduce((a, r) => a + (r.financialDiff || r.origTotal || 0), 0);
+      const bWs = dWs.filter(w => w.branch === b.id).reduce((a, w) => a + (w.total || 0), 0);
+      const bNet = Math.max(0, bGross - bRef) + bWs;
+      if (bNet <= 0 && bGross <= 0) return '';
+      return `<span style="display:inline-block;padding:1px 6px;margin:1px 2px;background:rgba(255,255,255,0.05);border-radius:4px;font-size:10px;color:var(--white-dim)">🏪 ${b.name}: <b style="color:var(--gold)">${fmtMoney(bNet)}</b></span>`;
+    }).filter(Boolean).join('');
+
+    return `<tr class="past-day-row" data-date="${dStr}" style="border-bottom:1px solid rgba(255,255,255,0.05);background:${isThisSelected ? 'rgba(201,168,76,0.12)' : 'transparent'}">
+      <td style="padding:8px 6px;white-space:nowrap">
+        <span style="font-weight:700;color:${isThisSelected ? 'var(--gold)' : 'var(--white)'}">${dStr}</span>
+        <span style="font-size:10px;color:rgba(197,203,216,0.6);margin-left:4px">(${dayName})</span>
+        ${isThisSelected ? `<span style="font-size:9.5px;padding:1px 5px;background:rgba(201,168,76,0.25);color:var(--gold);border-radius:4px;margin-left:4px;font-weight:700">★ ${lang==='am'?'የተመረጠ':'Selected'}</span>` : ''}
+      </td>
+      <td style="padding:8px 6px;text-align:right;font-weight:800;color:var(--gold);white-space:nowrap">${fmtMoney(dNet)}</td>
+      <td style="padding:8px 6px;text-align:center;font-weight:700;color:var(--white)">${dPcs} <small style="font-size:9.5px;color:var(--white-dim)">pcs</small></td>
+      <td style="padding:8px 6px;text-align:right;color:#FF9090;font-weight:700">${dRef > 0 ? `-${fmtMoney(dRef)}` : '0.00'}</td>
+      <td style="padding:8px 6px;text-align:center;color:var(--gold)">${dCutPcs}</td>
+      <td style="padding:8px 6px;text-align:center;color:#4FC3F7">${dSewPcs}</td>
+      <td style="padding:8px 6px">${shopBadges || `<span style="color:var(--white-dim);font-size:10px">—</span>`}</td>
+      <td style="padding:8px 6px;text-align:center;white-space:nowrap">
+        <button onclick="selectPastDailyDate('${targetId}', '${dStr}')" style="padding:4px 9px;border-radius:6px;border:1px solid ${isThisSelected ? 'var(--gold)' : 'rgba(79,195,247,0.4)'};background:${isThisSelected ? 'rgba(201,168,76,0.2)' : 'rgba(79,195,247,0.1)'};color:${isThisSelected ? 'var(--gold)' : '#4FC3F7'};font-weight:700;font-size:11px;cursor:pointer;font-family:inherit">
+          ${isThisSelected ? (lang==='am'?'ይህን እያዩ ነው ✓':'Viewing ✓') : (lang==='am'?'🔍 የዕለቱን መረጃ እይ':'🔍 View Day')}
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+
   container.innerHTML = `
-    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(79,195,247,0.3);border-radius:12px;padding:14px;margin-bottom:16px">
+    <div style="background:rgba(255,255,255,0.02);border:1.5px solid rgba(79,195,247,0.35);border-radius:12px;padding:14px;margin-bottom:16px">
       <!-- Header Banner -->
       <div style="display:flex;justify-content:space-between;align-items:center;cursor:${isDash?'pointer':'default'}" ${isDash?`onclick="toggleDashboardReport('${targetId}')"`:''}>
         <div style="display:flex;align-items:center;gap:10px">
-          <span style="font-size:22px">📅</span>
+          <span style="font-size:24px">📅</span>
           <div>
-            <h3 style="margin:0;color:#4FC3F7;font-size:15px;display:flex;align-items:center;gap:8px">
-              ${lang==='am'?'የባለፈው ቀን የተጠቃለለ ሪፖርት':'Past Daily Aggregated Summary'}
-              <span style="font-size:12px;font-weight:700;color:var(--gold);background:rgba(201,168,76,0.1);padding:2px 8px;border-radius:8px;border:1px solid rgba(201,168,76,0.25)">${date}</span>
+            <h3 style="margin:0;color:#4FC3F7;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              ${lang==='am'?'የዕለቱ እና ያለፉ ቀናት የተጠቃለለ ሪፖርት':'Daily & Past Days Aggregated Summary'}
+              <span style="font-size:12px;font-weight:700;color:var(--gold);background:rgba(201,168,76,0.12);padding:2px 8px;border-radius:8px;border:1px solid rgba(201,168,76,0.3)">${date}</span>
             </h3>
-            <div style="font-size:11px;color:var(--white-dim);margin-top:2px">${lang==='am'?'የተመረጠውን ቀን የሽያጭና የምርት አጠቃላይ እና የየሱቆቹ መረጃ':'Detailed overall and per-shop sales & production breakdown for chosen date'}</div>
+            <div style="font-size:11px;color:var(--white-dim);margin-top:2px">
+              ${lang==='am'?'የተመረጠውን ቀን እና ያለፉ ቀናት የየብቻው የሽያጭና የምርት ማጠቃለያ':'Inspect overall and per-shop sales & production breakdown for any past date individually'}
+            </div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <input type="date" value="${date}" onchange="renderPastDailySummary('${targetId}', this.value)" onclick="event.stopPropagation()"
-            style="padding:4px 8px;background:rgba(255,255,255,0.08);border:1.5px solid rgba(79,195,247,0.4);border-radius:7px;color:var(--gold);font-weight:700;font-size:12px;outline:none" />
-          ${isDash ? `<button id="${targetId}_btn" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:var(--white);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">${isCurrentlyOpen?(lang==='am'?'ሰብስብ ▲':'Collapse ▲'):(lang==='am'?'ዝርዝር ይመልከቱ ▾':'View details ▾')}</button>` : ''}
+            style="padding:5px 9px;background:rgba(255,255,255,0.08);border:1.5px solid rgba(79,195,247,0.4);border-radius:7px;color:var(--gold);font-weight:700;font-size:12px;outline:none;cursor:pointer" />
+          ${isDash ? `<button id="${targetId}_btn" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:var(--white);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">${isCurrentlyOpen?(lang==='am'?'ሰብስብ ▲':'Collapse ▲'):(lang==='am'?'ዝርዝር ይመልከቱ ▾':'View details ▾')}</button>` : `<button class="btn-gold" onclick="window.print()" style="font-size:12px;padding:5px 12px">🖨️ Print</button>`}
         </div>
+      </div>
+
+      <!-- Quick Past-Days Chips Row -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);align-items:center">
+        <span style="font-size:11px;font-weight:700;color:rgba(197,203,216,0.6);margin-right:2px">⚡ ${lang==='am'?'ፈጣን ቀን መምረጫ፡':'Quick Day:'}</span>
+        ${pastChips}
       </div>
 
       <!-- Body -->
       <div id="${targetId}_body" style="display:${isCurrentlyOpen?'block':'none'};margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
+        
         <!-- Side-by-Side Aggregated Summary Cards -->
         <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:14px">
+          
           <!-- Sales Aggregation Card -->
           <div style="padding:14px;background:rgba(0,0,0,0.2);border:1px solid rgba(201,168,76,0.25);border-radius:10px">
-            <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:10px">🛍️ ${lang==='am'?'የቀኑ ሽያጭ ተጠቃለለ (አጠቃላይ)':'Daily Sales Summary (Total)'} (${date})</div>
+            <div style="font-size:12.5px;font-weight:700;color:var(--gold);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+              <span>🛍️ ${lang==='am'?'የቀኑ ሽያጭ ተጠቃለለ (አጠቃላይ)':'Daily Sales Summary (Total)'}</span>
+              <span style="font-size:11px;color:rgba(197,203,216,0.6)">${date}</span>
+            </div>
+            
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px">
               <div style="padding:8px;background:rgba(201,168,76,0.08);border-radius:7px;text-align:center">
                 <div style="font-size:9.5px;color:rgba(197,203,216,0.5)">${lang==='am'?'አጠቃላይ ገቢ':'Net Revenue'}</div>
-                <div style="font-size:16px;font-weight:800;color:var(--gold)">${fmtMoney(netRevenue)}</div>
+                <div style="font-size:17px;font-weight:800;color:var(--gold)">${fmtMoney(netRevenue)}</div>
               </div>
               <div style="padding:8px;background:rgba(224,90,90,0.08);border-radius:7px;text-align:center">
                 <div style="font-size:9.5px;color:#FF9090">${lang==='am'?'ሪፈንድ':'Refunds'}</div>
-                <div style="font-size:16px;font-weight:800;color:#FF9090">-${fmtMoney(refundAmt)}</div>
+                <div style="font-size:17px;font-weight:800;color:#FF9090">-${fmtMoney(refundAmt)}</div>
               </div>
             </div>
 
@@ -9960,7 +11011,11 @@ function renderPastDailySummary(containerId, targetDate) {
 
           <!-- Production Aggregation Card -->
           <div style="padding:14px;background:rgba(0,0,0,0.2);border:1px solid rgba(79,195,247,0.25);border-radius:10px">
-            <div style="font-size:12px;font-weight:700;color:#4FC3F7;margin-bottom:10px">📊 ${lang==='am'?'የቀኑ ምርት ተጠቃለለ':'Daily Production Summary'} (${date})</div>
+            <div style="font-size:12.5px;font-weight:700;color:#4FC3F7;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+              <span>📊 ${lang==='am'?'የቀኑ ምርት ተጠቃለለ':'Daily Production Summary'}</span>
+              <span style="font-size:11px;color:rgba(197,203,216,0.6)">${date}</span>
+            </div>
+            
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">
               <div style="padding:8px 4px;background:rgba(201,168,76,0.08);border-radius:7px;text-align:center">
                 <div style="font-size:9px;color:var(--gold)">✂️ ${lang==='am'?'ቆረጣ':'Cutting'}</div>
@@ -9990,7 +11045,7 @@ function renderPastDailySummary(containerId, targetDate) {
           </div>
         </div>
 
-        <!-- Per-Shop Breakdown Section -->
+        <!-- Per-Shop Breakdown Section for Selected Date -->
         <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.08)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
             <div style="font-size:12.5px;font-weight:700;color:var(--gold);display:flex;align-items:center;gap:6px">
@@ -10007,8 +11062,68 @@ function renderPastDailySummary(containerId, targetDate) {
           </div>
         </div>
 
+        <!-- Comprehensive Past Days Individual Daily Breakdown Table -->
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+            <div>
+              <div style="font-size:13.5px;font-weight:800;color:#4FC3F7;display:flex;align-items:center;gap:6px">
+                🗓️ ${lang==='am'?'ያለፉ ቀናት የየዕለቱ ማጠቃለያ ዝርዝር (ለየብቻው)':'Past Days Individual Daily Breakdown'}
+              </div>
+              <div style="font-size:11px;color:var(--white-dim);margin-top:2px">
+                ${lang==='am'?'ማንኛውንም ያለፈ ቀን ሽያጭና ምርት ለየብቻው በቀላሉ ይምረጡና ዝርዝሩን ይመልከቱ':'Click any past day to load its complete overall and shop breakdown above'}
+              </div>
+            </div>
+            <div style="min-width:180px">
+              <input type="text" id="${targetId}_pastDaysSearch" oninput="filterPastDaysTable('${targetId}')"
+                placeholder="${lang==='am'?'ቀን ፈልግ (ምሳሌ፡ 2026-10)...':'Search date (e.g. 2026-10)...'}"
+                style="width:100%;padding:6px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(79,195,247,0.3);border-radius:7px;color:var(--white);font-size:12px;outline:none" />
+            </div>
+          </div>
+
+          <div style="overflow-x:auto;max-height:360px">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead>
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.12);color:rgba(197,203,216,0.6);text-align:left">
+                  <th style="padding:7px 6px">${lang==='am'?'ቀን':'Date'}</th>
+                  <th style="padding:7px 6px;text-align:right">${lang==='am'?'የቀኑ ሽያጭ (Net)':'Net Sales'}</th>
+                  <th style="padding:7px 6px;text-align:center">${lang==='am'?'የተሸጡ አልባሳት':'Garments Sold'}</th>
+                  <th style="padding:7px 6px;text-align:right">${lang==='am'?'ተመላሽ (Refund)':'Refund'}</th>
+                  <th style="padding:7px 6px;text-align:center">${lang==='am'?'ቆረጣ':'Cutting'}</th>
+                  <th style="padding:7px 6px;text-align:center">${lang==='am'?'ስፌት':'Sewing'}</th>
+                  <th style="padding:7px 6px">${lang==='am'?'የሱቆች ድርሻ':'Shop Breakdown'}</th>
+                  <th style="padding:7px 6px;text-align:center">${lang==='am'?'ተግባር':'Action'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${pastDayRows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>`;
+}
+
+function selectPastDailyDate(targetId, chosenDate) {
+  renderPastDailySummary(targetId, chosenDate);
+  const el = document.getElementById(targetId);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function filterPastDaysTable(targetId) {
+  const q = (document.getElementById(`${targetId}_pastDaysSearch`)?.value || '').trim().toLowerCase();
+  const rows = document.querySelectorAll(`#${targetId}_body .past-day-row`);
+  rows.forEach(r => {
+    const d = r.getAttribute('data-date') || '';
+    if (!q || d.includes(q)) {
+      r.style.display = '';
+    } else {
+      r.style.display = 'none';
+    }
+  });
 }
 
 function filterPastDailyBranch(targetId) {

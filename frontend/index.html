@@ -500,6 +500,12 @@
 
           <!-- WHOLESALE PANEL (inside production section) -->
           <section id="panel-wholesale" class="prod-panel hidden">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+              <div style="font-size:16px;font-weight:700;color:var(--gold-lt)">🏪 የጅምላ ሽያጭ አስተዳደር</div>
+              <button class="btn-gold" onclick="openWholesaleModal()" style="display:flex;align-items:center;gap:6px;padding:8px 14px;font-size:12px;border-radius:8px">
+                <span>➕</span> <span>አዲስ የጅምላ ሽያጭ መዝግብ</span>
+              </button>
+            </div>
             <div id="wholesaleAlerts"></div>
             <div id="wholesalePendingBanner"></div>
             <div id="wholesaleApprovalQueue"></div>
@@ -542,6 +548,8 @@
           </div>
           <!-- Wholesale section for sales staff -->
           <div id="salesReportWholesaleSection"></div>
+          <!-- Shop Received Goods History for Sales Staff Report -->
+          <div id="salesReportReceivedGoodsSection" style="margin-top:14px"></div>
         </section>
 
         <!-- CUSTOMERS -->
@@ -585,6 +593,8 @@
               <div class="card mt-16">
                 <h3 class="card-title">የዕቃ ክምችት (ሱቅ)</h3>
                 <div id="salesStockCards"></div>
+                <!-- Shop Received Goods History for Owner -->
+                <div id="shopReceivedGoodsSection" style="margin-top:14px"></div>
               </div>
               <div class="card mt-16">
                 <h3 class="card-title">የሽያጭ መዝገብ</h3>
@@ -596,6 +606,10 @@
               <!-- Owner-only reports: hidden from sales staff via salesOwnerView -->
               <div id="ownerWholesaleSection"></div>
               <div id="ownerLoanSection"></div>
+              <!-- 1ኛ ሽያጭ ላይ ሪፈንድ ሪፖርት ኦነር ላይ እንዲታይ ማድረግ -->
+              <div id="ownerSalesRefundSection" style="margin-top:16px"></div>
+              <!-- 2ኛ የየእለቱን ሸያጭ ወይም ምርት የተጠቃለለ መረጃ ወደ ኃላ ያለፈን ቀን ለየብቻው ማሳያ -->
+              <div id="ownerPastDailySalesSection" style="margin-top:16px"></div>
             </div>
 
             <!-- POS Cashier UI (sales staff only) -->
@@ -646,8 +660,11 @@
 
                 <!-- Products grid - full width, clean -->
                 <div id="posProductGrid"
-                  style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;padding-bottom:90px">
+                  style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;padding-bottom:20px">
                 </div>
+
+                <!-- Shop Received Goods History for Sales Staff (ሱቆች ላይ ገቢ የሆነ እቃ ዝርዝር ከታች መቼ ምንያህል ገባ) -->
+                <div id="posShopReceivedGoodsSection" style="margin-top:16px;padding-bottom:70px"></div>
               </div>
 
               <!-- WHOLESALE TAB -->
@@ -655,7 +672,7 @@
                 <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px">🏪 የጅምላ ሽያጭ</div>
                 <div
                   style="background:rgba(255,255,255,0.03);border:1px solid rgba(201,168,76,0.15);border-radius:13px;padding:16px">
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
                     <div>
                       <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ነጋዴ /
                         ደንበኛ ስም <span style="color:#FF9090">*</span></div>
@@ -669,33 +686,78 @@
                         style="width:100%;box-sizing:border-box">
                     </div>
                   </div>
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-                    <div>
-                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ምርት
-                        <span style="color:#FF9090">*</span></div>
-                      <select id="posWsProduct" class="form-input" onchange="posWsUpdatePrice()"
-                        style="width:100%;box-sizing:border-box"></select>
+
+                  <!-- PRODUCT SELECTION & MULTI-SELECT HEADER -->
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.07)">
+                    <div style="font-size:12px;font-weight:700;color:var(--gold-lt);display:flex;align-items:center;gap:6px">
+                      <span>📦 የሚሸጡ ምርቶች</span>
                     </div>
-                    <div>
-                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ብዛት
-                        <span style="color:#FF9090">*</span></div>
-                      <input type="number" id="posWsQty" class="form-input" min="1" placeholder="0"
-                        oninput="posWsUpdateTotal()" style="width:100%;box-sizing:border-box">
-                    </div>
+                    <button type="button" onclick="openWsMultiSelectModal('pos')" class="btn-gold"
+                      style="padding:5px 12px;font-size:11.5px;border-radius:7px;display:flex;align-items:center;gap:5px;background:linear-gradient(135deg,#FFA726,#E65100);cursor:pointer;border:none;color:#fff;font-weight:700">
+                      <span>🛍️</span> <span>በጅምላ ምረጥ (Multi-Select)</span>
+                    </button>
                   </div>
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+
+                  <!-- Quick Add Row -->
+                  <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:flex-end;margin-bottom:10px;background:rgba(255,255,255,0.02);padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06)">
                     <div>
-                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">💰 የጅምላ
-                        ዋጋ (በ1 ቁ.)</div>
-                      <div id="posWsPriceDisplay"
-                        style="padding:10px 14px;background:rgba(79,195,247,0.07);border:1px solid rgba(79,195,247,0.3);border-radius:8px;font-size:16px;font-weight:700;color:#4FC3F7">
-                        —</div>
-                      <div style="font-size:10px;color:rgba(197,203,216,0.4);margin-top:3px" id="posWsRetailRef"></div>
+                      <div style="font-size:10px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:3px">ምርት</div>
+                      <select id="posWsProduct" class="form-input" onchange="posWsUpdatePrice()" style="width:100%;box-sizing:border-box;font-size:12px"></select>
+                    </div>
+                    <div>
+                      <div style="font-size:10px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:3px">ብዛት</div>
+                      <input type="number" id="posWsQty" class="form-input" min="1" placeholder="0" style="width:100%;box-sizing:border-box;font-size:12px;text-align:center">
+                    </div>
+                    <div>
+                      <div style="font-size:10px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:3px">የጅምላ ዋጋ</div>
+                      <div id="posWsPriceDisplay" style="padding:6px 8px;background:rgba(79,195,247,0.07);border:1px solid rgba(79,195,247,0.25);border-radius:6px;font-size:12px;font-weight:700;color:#4FC3F7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                        —
+                      </div>
+                      <div style="font-size:9px;color:rgba(197,203,216,0.4);margin-top:2px" id="posWsRetailRef"></div>
                       <input type="hidden" id="posWsPrice">
                     </div>
                     <div>
-                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">አከፋፈል
-                      </div>
+                      <button type="button" onclick="posWsAddItem()" class="btn-gold" style="padding:6px 12px;font-size:12px;height:34px;white-space:nowrap;font-weight:700">
+                        + አክል
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Selected Products Table -->
+                  <div id="posWsItemsContainer" style="margin-bottom:12px;border:1px solid rgba(201,168,76,0.2);border-radius:9px;overflow:hidden;background:rgba(0,0,0,0.2)">
+                    <table style="width:100%;border-collapse:collapse;font-size:11.5px" id="posWsItemsTable">
+                      <thead>
+                        <tr style="background:rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.08);color:var(--white-dim)">
+                          <th style="padding:7px 10px;text-align:left;font-weight:600">ምርት</th>
+                          <th style="padding:7px 6px;text-align:center;font-weight:600">ክምችት</th>
+                          <th style="padding:7px 8px;text-align:center;font-weight:600">ብዛት</th>
+                          <th style="padding:7px 8px;text-align:right;font-weight:600">የጅምላ ዋጋ</th>
+                          <th style="padding:7px 10px;text-align:right;font-weight:600">ድምር</th>
+                          <th style="padding:7px 6px;text-align:center;width:28px">✕</th>
+                        </tr>
+                      </thead>
+                      <tbody id="posWsItemsTbody">
+                        <!-- Dynamic items -->
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <!-- Totals Summary Card -->
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.25);border-radius:9px;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+                    <div style="font-size:11.5px;color:var(--white-dim);display:flex;gap:12px">
+                      <span>የተመረጡ፡ <b id="posWsItemsCount" style="color:var(--gold)">0</b> ዓይነቶች</span>
+                      <span>ጠቅላላ ብዛት፡ <b id="posWsTotalPieces" style="color:#4FC3F7">0</b> ቁ.</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span style="font-size:11.5px;color:var(--white-dim)">አጠቃላይ ድምር፡</span>
+                      <span style="font-size:17px;font-weight:700;color:var(--gold)" id="posWsTotal">—</span>
+                    </div>
+                  </div>
+
+                  <!-- Payment & Notes -->
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                    <div>
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">አከፋፈል</div>
                       <select id="posWsPayment" class="form-input" onchange="posWsTogglePayment()"
                         style="width:100%;box-sizing:border-box">
                         <option value="cash">💵 ጥሬ ገንዘብ</option>
@@ -703,30 +765,22 @@
                         <option value="credit">📒 ክሬዲት</option>
                       </select>
                     </div>
-                  </div>
-                  <div id="posWsTransferRow" style="display:none;margin-bottom:10px">
-                    <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ባንክ / ቻናል
+                    <div id="posWsTransferRow" style="display:none">
+                      <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ባንክ / ቻናል</div>
+                      <input type="text" id="posWsTransferVia" class="form-input" placeholder="CBE, TeleBirr..."
+                        style="width:100%;box-sizing:border-box">
                     </div>
-                    <input type="text" id="posWsTransferVia" class="form-input" placeholder="CBE, TeleBirr..."
-                      style="width:100%;box-sizing:border-box">
                   </div>
-                  <div style="margin-bottom:14px">
-                    <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ማስታወሻ
-                    </div>
+                  <div style="margin-bottom:12px">
+                    <div style="font-size:11px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:5px">ማስታወሻ</div>
                     <input type="text" id="posWsNote" class="form-input" placeholder="ምንም"
                       style="width:100%;box-sizing:border-box">
                   </div>
-                  <!-- Total display -->
                   <div
-                    style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:9px;margin-bottom:14px">
-                    <span style="font-size:12px;color:var(--white-dim)">አጠቃላይ</span>
-                    <span style="font-size:18px;font-weight:700;color:var(--gold)" id="posWsTotal">—</span>
-                  </div>
-                  <div
-                    style="padding:8px 12px;background:rgba(255,167,38,0.08);border:1px solid rgba(255,167,38,0.3);border-radius:8px;font-size:11px;color:#FFA726;margin-bottom:14px">
+                    style="padding:8px 12px;background:rgba(255,167,38,0.08);border:1px solid rgba(255,167,38,0.3);border-radius:8px;font-size:11px;color:#FFA726;margin-bottom:12px">
                     ⚠️ ጅምላ ሽያጭ ኦነሩ ካፀደቀ በኋላ ብቻ ይፈፀማል
                   </div>
-                  <button onclick="posSubmitWholesale()"
+                  <button onclick="posSubmitWholesale(this)"
                     style="width:100%;padding:13px;border-radius:10px;border:none;background:linear-gradient(135deg,#FFA726,#E65100);color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">
                     📤 ለኦነር ላክ
                   </button>
@@ -1916,43 +1970,93 @@
   <script src="app.js"></script>
   <!-- WHOLESALE MODAL -->
   <div id="wholesaleModal" class="modal-overlay hidden" onclick="if(event.target===this)closeModal('wholesaleModal')">
-    <div class="modal-box" style="max-width:480px">
+    <div class="modal-box" style="max-width:580px;width:95%">
       <div class="modal-header">
         <span class="modal-title">🏪 የጅምላ ሽያጭ</span>
         <button class="modal-close" onclick="closeModal('wholesaleModal')">✕</button>
       </div>
       <div class="modal-body">
-        <div class="form-row">
-          <label class="form-label">ቀን *</label>
-          <input type="date" id="wsDate" class="form-input">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div>
+            <label class="form-label" style="font-size:11px">ቀን *</label>
+            <input type="date" id="wsDate" class="form-input" style="width:100%;box-sizing:border-box">
+          </div>
+          <div>
+            <label class="form-label" style="font-size:11px">ስልክ</label>
+            <input type="tel" id="wsPhone" class="form-input" placeholder="09..." style="width:100%;box-sizing:border-box">
+          </div>
         </div>
-        <div class="form-row">
-          <label class="form-label">ነጋዴ / ደንበኛ ስም *</label>
-          <input type="text" id="wsCustomer" class="form-input" placeholder="ነጋዴው ስም">
+        <div class="form-row" style="margin-bottom:12px">
+          <label class="form-label" style="font-size:11px">ነጋዴ / ደንበኛ ስም *</label>
+          <input type="text" id="wsCustomer" class="form-input" placeholder="ነጋዴው ስም" style="width:100%;box-sizing:border-box">
         </div>
-        <div class="form-row">
-          <label class="form-label">ስልክ</label>
-          <input type="tel" id="wsPhone" class="form-input" placeholder="09...">
+
+        <!-- Multi-Product Header -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.07)">
+          <div style="font-size:12px;font-weight:700;color:var(--gold-lt);display:flex;align-items:center;gap:6px">
+            <span>📦 የሚሸጡ ምርቶች</span>
+          </div>
+          <button type="button" onclick="openWsMultiSelectModal('modal')" class="btn-gold"
+            style="padding:5px 12px;font-size:11.5px;border-radius:7px;display:flex;align-items:center;gap:5px;background:linear-gradient(135deg,#FFA726,#E65100);cursor:pointer;border:none;color:#fff;font-weight:700">
+            <span>🛍️</span> <span>በጅምላ ምረጥ (Multi-Select)</span>
+          </button>
         </div>
-        <div class="form-row">
-          <label class="form-label">ምርት *</label>
-          <select id="wsProduct" class="form-input" onchange="wsUpdatePrice()"></select>
+
+        <!-- Quick Add Row -->
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:flex-end;margin-bottom:10px;background:rgba(255,255,255,0.02);padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06)">
+          <div>
+            <div style="font-size:10px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:3px">ምርት</div>
+            <select id="wsProduct" class="form-input" onchange="wsUpdatePrice()" style="width:100%;box-sizing:border-box;font-size:12px"></select>
+          </div>
+          <div>
+            <div style="font-size:10px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:3px">ብዛት</div>
+            <input type="number" id="wsQty" class="form-input" min="1" placeholder="0" style="width:100%;box-sizing:border-box;font-size:12px;text-align:center">
+          </div>
+          <div>
+            <div style="font-size:10px;color:rgba(197,203,216,0.5);font-weight:600;margin-bottom:3px">የጅምላ ዋጋ</div>
+            <input type="number" id="wsPrice" class="form-input" min="0" placeholder="0" style="width:100%;box-sizing:border-box;font-size:12px">
+            <div style="font-size:9px;color:rgba(197,203,216,0.4);margin-top:2px" id="wsRetailRef"></div>
+          </div>
+          <div>
+            <button type="button" onclick="wsModalAddItem()" class="btn-gold" style="padding:6px 12px;font-size:12px;height:34px;white-space:nowrap;font-weight:700">
+              + አክል
+            </button>
+          </div>
         </div>
-        <div class="form-row">
-          <label class="form-label">ብዛት *</label>
-          <input type="number" id="wsQty" class="form-input" min="1" placeholder="0" oninput="wsUpdateTotal()">
+
+        <!-- Selected Products Table -->
+        <div id="wsModalItemsContainer" style="margin-bottom:12px;border:1px solid rgba(201,168,76,0.2);border-radius:9px;overflow:hidden;background:rgba(0,0,0,0.2)">
+          <table style="width:100%;border-collapse:collapse;font-size:11.5px" id="wsModalItemsTable">
+            <thead>
+              <tr style="background:rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.08);color:var(--white-dim)">
+                <th style="padding:7px 10px;text-align:left;font-weight:600">ምርት</th>
+                <th style="padding:7px 6px;text-align:center;font-weight:600">ክምችት</th>
+                <th style="padding:7px 8px;text-align:center;font-weight:600">ብዛት</th>
+                <th style="padding:7px 8px;text-align:right;font-weight:600">የጅምላ ዋጋ</th>
+                <th style="padding:7px 10px;text-align:right;font-weight:600">ድምር</th>
+                <th style="padding:7px 6px;text-align:center;width:28px">✕</th>
+              </tr>
+            </thead>
+            <tbody id="wsModalItemsTbody">
+              <!-- Dynamic items -->
+            </tbody>
+          </table>
         </div>
-        <div class="form-row">
-          <label class="form-label">የጅምላ ዋጋ (በ1 ቁ.) *</label>
-          <input type="number" id="wsPrice" class="form-input" min="0" placeholder="0" oninput="wsUpdateTotal()">
-          <div style="font-size:11px;color:var(--white-dim);margin-top:3px" id="wsRetailRef"></div>
+
+        <!-- Totals Summary Card -->
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.25);border-radius:9px;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div style="font-size:11.5px;color:var(--white-dim);display:flex;gap:12px">
+            <span>የተመረጡ፡ <b id="wsModalItemsCount" style="color:var(--gold)">0</b> ዓይነቶች</span>
+            <span>ጠቅላላ ብዛት፡ <b id="wsModalTotalPieces" style="color:#4FC3F7">0</b> ቁ.</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11.5px;color:var(--white-dim)">አጠቃላይ ድምር፡</span>
+            <span style="font-size:17px;font-weight:700;color:var(--gold)" id="wsTotal">—</span>
+          </div>
         </div>
+
         <div class="form-row">
-          <label class="form-label">አጠቃላይ</label>
-          <div id="wsTotal" style="font-size:16px;font-weight:700;color:var(--gold);padding:6px 0">—</div>
-        </div>
-        <div class="form-row">
-          <label class="form-label">አከፋፈል *</label>
+          <label class="form-label" style="font-size:11px">አከፋፈል *</label>
           <select id="wsPayment" class="form-input" onchange="wsTogglePayment()">
             <option value="cash">💵 ጥሬ ገንዘብ</option>
             <option value="transfer">🏦 ዝውውር</option>
@@ -1960,11 +2064,11 @@
           </select>
         </div>
         <div id="wsTransferRow" class="form-row hidden">
-          <label class="form-label">ባንክ / ቻናል</label>
+          <label class="form-label" style="font-size:11px">ባንክ / ቻናል</label>
           <input type="text" id="wsTransferVia" class="form-input" placeholder="CBE, TeleBirr...">
         </div>
         <div class="form-row">
-          <label class="form-label">ማስታወሻ</label>
+          <label class="form-label" style="font-size:11px">ማስታወሻ</label>
           <input type="text" id="wsNote" class="form-input" placeholder="ምንም">
         </div>
         <div
@@ -1973,8 +2077,62 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-gold" onclick="saveWholesale()">📤 ለኦነር ላክ</button>
+        <button class="btn-gold" onclick="saveWholesale(this)">📤 ለኦነር ላክ</button>
         <button class="btn-outline" onclick="closeModal('wholesaleModal')">ይቅር</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHOLESALE MULTI-SELECT MODAL -->
+  <div id="wsMultiSelectModal" class="modal-overlay hidden" onclick="if(event.target===this)closeModal('wsMultiSelectModal')">
+    <div class="modal-box" style="max-width:680px;width:95%;max-height:88vh;display:flex;flex-direction:column">
+      <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.08)">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:18px">🛍️</span>
+          <span class="modal-title" style="color:var(--gold);font-size:15px;font-weight:700">የጅምላ ምርቶች መምረጫ (Multi-Selection)</span>
+        </div>
+        <button class="modal-close" onclick="closeModal('wsMultiSelectModal')" style="background:rgba(255,255,255,0.06);border:none;color:var(--white-dim);width:30px;height:30px;border-radius:8px;cursor:pointer">✕</button>
+      </div>
+
+      <div class="modal-body" style="padding:14px 18px;overflow-y:auto;flex:1">
+        <!-- Search and quick select controls -->
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px;position:relative">
+            <input type="text" id="wsMultiSearch" class="form-input" placeholder="🔍 ምርት በስም ፈልግ..." oninput="filterWsMultiProducts()" style="width:100%;box-sizing:border-box;padding-left:32px">
+            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:13px;color:rgba(197,203,216,0.5)">🔍</span>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button type="button" onclick="selectAllWsMulti(true)" class="btn-outline" style="padding:6px 11px;font-size:11px;border-radius:6px;cursor:pointer">☑️ ሁሉንም ምረጥ</button>
+            <button type="button" onclick="selectAllWsMulti(false)" class="btn-outline" style="padding:6px 11px;font-size:11px;border-radius:6px;cursor:pointer">◻️ አፅዳ</button>
+          </div>
+        </div>
+
+        <div style="font-size:11px;color:var(--white-dim);margin-bottom:8px;display:flex;justify-content:space-between">
+          <span>የሚፈልጓቸውን ምርቶች ምልክት በማድረግ የሚፈለገውን ብዛት ያስገቡ፡</span>
+          <span id="wsMultiAvailableCount" style="color:var(--gold);font-weight:600">0 ምርቶች</span>
+        </div>
+
+        <!-- Product List -->
+        <div id="wsMultiProductList" style="display:flex;flex-direction:column;gap:6px;max-height:45vh;overflow-y:auto;padding-right:4px">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- Footer with live totals -->
+      <div class="modal-footer" style="padding:12px 18px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(255,255,255,0.08);background:rgba(0,0,0,0.25);flex-wrap:wrap;gap:10px">
+        <div style="display:flex;gap:12px;align-items:center;font-size:12px">
+          <div>የተመረጡ፡ <b id="wsMultiSelectedCount" style="color:var(--gold)">0</b></div>
+          <div style="width:1px;height:14px;background:rgba(255,255,255,0.15)"></div>
+          <div>ጠቅላላ ብዛት፡ <b id="wsMultiSelectedPieces" style="color:#4FC3F7">0</b></div>
+          <div style="width:1px;height:14px;background:rgba(255,255,255,0.15)"></div>
+          <div>ድምር ዋጋ፡ <b id="wsMultiSelectedTotal" style="color:#80e080;font-size:13.5px">0.00 ብር</b></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn-outline" onclick="closeModal('wsMultiSelectModal')" style="padding:8px 16px;border-radius:8px">ይቅር</button>
+          <button type="button" class="btn-gold" onclick="applyWsMultiSelection()" style="padding:8px 20px;border-radius:8px;font-weight:700;display:flex;align-items:center;gap:6px">
+            <span>➕</span> <span>የተመረጡትን ጨምር</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
