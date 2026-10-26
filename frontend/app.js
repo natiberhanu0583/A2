@@ -2601,11 +2601,39 @@ function renderDashboard() {
         }).join('')}`);
 
       if (pendingEdits.length) sections.push(`
-        <div style="font-size:10px;font-weight:700;color:#FF9090;letter-spacing:0.5px;margin:8px 0 4px">✏️ ${lang==='am'?'የመረጃ ማስተካከያ ጥያቄዎች':'DATA CORRECTION REQUESTS'} (${pendingEdits.length})</div>
+        <div style="font-size:11px;font-weight:700;color:#FF9090;letter-spacing:0.5px;margin:10px 0 6px;display:flex;align-items:center;gap:6px">
+          ✏️ ${lang==='am'?'የመረጃ ማስተካከያ ጥያቄዎች (በስህተት የተሞሉ)':'DATA CORRECTION REQUESTS'}
+          <span style="background:rgba(255,144,144,0.15);padding:1px 6px;border-radius:6px;font-size:10px;border:1px solid rgba(255,144,144,0.3)">${pendingEdits.length}</span>
+        </div>
         ${pendingEdits.map(e => {
-          const modName = { sales:'ሽያጭ', cutting:'ቆረጣ', sewing:'ስፌት', store:'ዕቃ ቤት', expenses:'ወጪ', refunds:'ሪፈንድ' }[e.dataKey] || e.dataKey;
-          const diffStr = Object.entries(e.newVal||{}).map(([k,v]) => `${k}: ${e.oldVal[k]} ➔ <b>${v}</b>`).join(', ');
-          return row('✏️', `[${modName}] ${e.reason||'ማስተካከያ'}`, `${diffStr} · ${e.requestedBy||'—'} · ${e.date}`, '', `approveEditRequest('${e.id}')`, `rejectEditRequest('${e.id}')`);
+          const modMap = { sales:'🛍️ ሽያጭ', cutting:'✂️ ቆረጣ', sewing:'🪡 ስፌት', store:'🏬 ዕቃ ቤት', expenses:'📤 ወጪ', refunds:'🔄 ሪፈንድ', wholesale:'🏪 ጅምላ', customers:'👥 ደንበኞች', procurementOrders:'🧵 ግዢ' };
+          const modName = modMap[e.dataKey] || `📋 ${e.dataKey}`;
+          const fieldNames = { qty:'ብዛት', price:'ዋጋ', total:'ድምር', product:'ምርት', type:'ዓይነት', payment:'አከፋፈል', transferVia:'ቻናል', worker:'ሰራተኛ', customer:'ደንበኛ', amount:'መጠን', cost:'ወጪ', item:'እቃ' };
+          const diffItems = Object.entries(e.newVal||{}).map(([k,v]) => {
+            const fLabel = fieldNames[k] || k;
+            const oldV = e.oldVal ? (e.oldVal[k] ?? '—') : '—';
+            return `<div style="font-size:11px;background:rgba(0,0,0,0.3);padding:3px 8px;border-radius:5px">
+              <span style="color:rgba(197,203,216,0.6)">${fLabel}:</span>
+              <span style="text-decoration:line-through;color:#FF9090;margin:0 4px">${oldV}</span>
+              <span style="color:#80e080;font-weight:700">➔ ${v}</span>
+            </div>`;
+          }).join('');
+          return `
+            <div style="background:rgba(0,0,0,0.22);border:1px solid rgba(255,144,144,0.25);border-radius:10px;padding:10px 12px;margin-bottom:6px">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+                <div>
+                  <div style="font-size:12.5px;font-weight:700;color:var(--white)">${modName} · <span style="color:#FFA726">${e.reason||'የስህተት ማስተካከያ'}</span></div>
+                  <div style="font-size:10.5px;color:rgba(197,203,216,0.5);margin-top:2px">👤 ጠያቂ: <b>${e.requestedBy||'—'}</b> · 📅 ${e.date||''}</div>
+                </div>
+                <div style="display:flex;gap:6px">
+                  <button onclick="approveEditRequest('${e.id}')" style="padding:4px 11px;border-radius:6px;border:1px solid rgba(76,175,80,0.5);background:rgba(76,175,80,0.15);color:#80e080;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700">✅ ${lang==='am'?'አፅድቅ':'Approve'}</button>
+                  <button onclick="rejectEditRequest('${e.id}')" style="padding:4px 9px;border-radius:6px;border:1px solid rgba(224,90,90,0.4);background:rgba(224,90,90,0.1);color:#FF9090;cursor:pointer;font-family:inherit;font-size:11.5px">❌</button>
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+                ${diffItems}
+              </div>
+            </div>`;
         }).join('')}`);
 
       if (pendingStr.length) sections.push(`
@@ -3459,7 +3487,10 @@ function renderTransferCard(tr) {
           <span style="font-size:14px;font-weight:700;color:var(--white)">${tr.qty} × ${tr.type}</span>
           <div style="font-size:11px;color:var(--white-dim);margin-top:1px">${tr.date} · 🏪 ${br?br.name:tr.branch}</div>
         </div>
-        <span style="font-size:10px;font-weight:700;color:${sc};background:${sc}22;padding:3px 8px;border-radius:6px;border:1px solid ${sc}44;white-space:nowrap;margin-left:8px">${SL[tr.status]||tr.status}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;font-weight:700;color:${sc};background:${sc}22;padding:3px 8px;border-radius:6px;border:1px solid ${sc}44;white-space:nowrap;margin-left:8px">${SL[tr.status]||tr.status}</span>
+          ${editRecordBtn('storeTransfers', tr.id)}
+        </div>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
         <span style="font-size:11px;color:rgba(197,203,216,0.5)">🚗 ${tr.carrier||'—'}</span>
@@ -3578,14 +3609,15 @@ function renderStore() {
         const sl = SL[t.status] || t.status;
         const statusBadge = `<span style="font-size:10px;font-weight:700;color:${sc};background:${sc}18;padding:2px 8px;border-radius:5px;border:1px solid ${sc}44;white-space:nowrap">${sl}</span>`;
 
-        let actionCell = '—';
+        let actionCell = editRecordBtn('storeTransfers', t.id);
         if (isOwner2 && t.status === 'pending_owner') {
           actionCell = `<div style="display:flex;gap:4px">
             <button onclick="approveStoreTransfer('${t.id}')" style="padding:3px 9px;border-radius:5px;border:1px solid rgba(76,175,80,0.5);background:rgba(76,175,80,0.12);color:#80e080;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700">✅ ${lang==='am'?'አፅድቅ':'Approve'}</button>
             <button onclick="rejectStoreTransfer('${t.id}')" style="padding:3px 9px;border-radius:5px;border:1px solid rgba(224,90,90,0.4);background:rgba(224,90,90,0.1);color:#FF9090;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700">❌</button>
+            ${editRecordBtn('storeTransfers', t.id)}
           </div>`;
         } else if (isSales2 && t.status === 'pending_receiver' && t.branch === myBranch2) {
-          actionCell = `<button onclick="confirmStoreTransferReceipt('${t.id}', this)" style="padding:3px 9px;border-radius:5px;border:1px solid rgba(79,195,247,0.5);background:rgba(79,195,247,0.1);color:#4FC3F7;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700">📦 ${lang==='am'?'ተቀበልኩ':'Receive'}</button>`;
+          actionCell = `<div style="display:flex;gap:4px"><button onclick="confirmStoreTransferReceipt('${t.id}', this)" style="padding:3px 9px;border-radius:5px;border:1px solid rgba(79,195,247,0.5);background:rgba(79,195,247,0.1);color:#4FC3F7;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700">📦 ${lang==='am'?'ተቀበልኩ':'Receive'}</button>${editRecordBtn('storeTransfers', t.id)}</div>`;
         }
 
         return `<tr>
@@ -3982,7 +4014,7 @@ function renderSales() {
         return `<tr><td>${r.date}</td><td>${r.product}</td><td>${r.qty}</td>
           <td>${fmtMoney(r.price)}</td><td style="color:var(--gold-lt);font-weight:600">${fmtMoney(total)}</td>
           <td>${payBadge}</td><td>${via}</td><td>${br?br.name:r.branch}</td>
-          <td>${requestDeleteBtn('sales',r.id)}</td></tr>`;
+          <td style="white-space:nowrap">${editRecordBtn('sales',r.id)}${requestDeleteBtn('sales',r.id)}</td></tr>`;
       }).join('')
     : noDataRow(h.length);
   // Wholesale section for owner
@@ -3994,6 +4026,8 @@ function renderSales() {
   renderPastDailySummary('ownerPastDailySalesSection', today);
   // ሱቆች ላይ ገቢ የሆነ እቃ ዝርዝር (ለኦነር)
   renderShopReceivedGoods('shopReceivedGoodsSection');
+  // የመረጃ ማስተካከያ ማፅደቂያ ክፍል (ለኦነር)
+  if (typeof renderOwnerCorrectionRequests === 'function') renderOwnerCorrectionRequests('ownerCorrectionsSection');
 }
 
 function updateSaleStock() {
@@ -4529,6 +4563,7 @@ function renderPOSTodayLog(salesList, labelDate, refundList) {
       <div style="display:flex;align-items:center;gap:6px">
         <span style="font-size:12px;font-weight:700;color:var(--gold)">${fmtMoney(s.qty*s.price)}</span>
         <span>${payIcon}</span>
+        ${editRecordBtn('sales', s.id)}
       </div>
     </div>`;
   });
@@ -4888,7 +4923,10 @@ function renderRefundHistory() {
     return `<div style="padding:10px 12px;background:${isExchange?'rgba(66,165,245,0.06)':'rgba(224,90,90,0.06)'};border-radius:9px;margin-bottom:8px;border-left:3px solid ${isExchange?'rgba(66,165,245,0.4)':'rgba(224,90,90,0.4)'}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
         <span style="font-size:13px;font-weight:700;color:var(--white)">${isExchange?'🔁':'💵'} ${r.product} ×${r.qty}</span>
-        <span style="font-size:10px;color:var(--white-dim)">${r.date}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;color:var(--white-dim)">${r.date}</span>
+          ${editRecordBtn('refunds', r.id)}
+        </div>
       </div>
       ${r.saleDate ? `<div style="font-size:11px;color:rgba(197,203,216,0.45);margin-bottom:3px">📅 ተሸጠ: ${r.saleDate}</div>` : ''}
       ${isExchange && r.newProduct ? `<div style="font-size:11px;color:#90CAF9;margin-bottom:3px">🔁 → ${r.newProduct} ×${r.newQty}</div>` : ''}
@@ -5268,6 +5306,7 @@ function renderCustomers() {
 
           <div style="display:flex;gap:8px;margin-top:8px">
             <button class="btn-outline" style="font-size:11px;padding:4px 10px" onclick="viewCustomerHistory('${c.id}','${c.name.replace(/'/g,"\'")}')">📋 ${lang==='am'?'ታሪክ':'History'}</button>
+            ${editRecordBtn('customers', c.id)}
             ${currentUser.role==='owner'?`<button class="btn-danger" onclick="requestDelete('customers','${c.id}')">🗑</button>`:''}
           </div>
         </div>`;
@@ -5359,7 +5398,7 @@ function renderFinance() {
 
   populateBranchSelect('expBranch');
 
-  const h=lang==='am'?['ቀን','ምድብ','መጠን','ቅርንጫፍ','ዝርዝር','ስረዝ']:['Date','Category','Amount','Branch','Description','Del'];
+  const h=lang==='am'?['ቀን','ምድብ','መጠን','ቅርንጫፍ','ዝርዝር','ተግባር']:['Date','Category','Amount','Branch','Description','Action'];
   document.getElementById('expenseThead').innerHTML=`<tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>`;
   const branches=getData('branches');
   document.getElementById('expenseTbody').innerHTML=expenses.length
@@ -5367,7 +5406,7 @@ function renderFinance() {
         const br=branches.find(b=>b.id===r.branch);
         return `<tr><td>${r.date}</td><td>${r.category}</td><td style="color:var(--danger)">${fmtMoney(r.amount)}</td>
           <td>${br?br.name:(r.branch||'—')}</td><td>${r.desc}</td>
-          <td>${requestDeleteBtn('expenses',r.id)}</td></tr>`;
+          <td style="white-space:nowrap">${editRecordBtn('expenses',r.id)}${requestDeleteBtn('expenses',r.id)}</td></tr>`;
       }).join('')
     : noDataRow(h.length);
 
@@ -5459,7 +5498,10 @@ function renderProcurement() {
       </div>
       ${o.supplier ? `<div style="margin-left:8px;margin-top:6px;font-size:11px;color:rgba(197,203,216,0.45)">🏭 ${o.supplier}</div>` : ''}
       ${o.note ? `<div style="margin-left:8px;margin-top:3px;font-size:11px;color:rgba(197,203,216,0.35);font-style:italic">💬 ${o.note}</div>` : ''}
-      <div style="margin-left:8px">${actionBtn}</div>
+      <div style="margin-left:8px;margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:6px">
+        <div>${editRecordBtn('procurementOrders', o.id)}</div>
+        <div style="flex:1">${actionBtn}</div>
+      </div>
     </div>`;
   }
 
@@ -7959,6 +8001,7 @@ function renderWholesaleReportForStaff() {
               <th style="font-size:11px">${lang==='am'?'ብዛት':'Qty'}</th>
               <th style="font-size:11px">${lang==='am'?'አጠቃላይ':'Total'}</th>
               <th style="font-size:11px">${lang==='am'?'ሁኔታ':'Status'}</th>
+              <th style="font-size:11px;text-align:center">${lang==='am'?'ተግባር':'Action'}</th>
             </tr></thead>
             <tbody>
               ${ws.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,20).map(w=>{
@@ -7971,6 +8014,7 @@ function renderWholesaleReportForStaff() {
                   <td style="text-align:center;font-weight:700;color:var(--gold)">${w.qty}</td>
                   <td style="font-weight:700;color:var(--gold)">${fmtMoney(w.total)}</td>
                   <td><span style="font-size:10px;color:${sc};background:${sc}18;padding:2px 7px;border-radius:4px;border:1px solid ${sc}44">${sl}</span></td>
+                  <td style="text-align:center;white-space:nowrap">${editRecordBtn('wholesale',w.id)}</td>
                 </tr>`;
               }).join('')}
             </tbody>
@@ -8065,8 +8109,8 @@ function renderWholesaleReportForOwner() {
 
   // Full record table
   const hdrs = lang==='am'
-    ? ['ቀን','ነጋዴ','ምርት','ብዛት','አጠቃላይ','አከፋፈል','ቅርንጫፍ','ሸጠ','ሁኔታ']
-    : ['Date','Trader','Product','Qty','Total','Payment','Branch','By','Status'];
+    ? ['ቀን','ነጋዴ','ምርት','ብዛት','አጠቃላይ','አከፋፈል','ቅርንጫፍ','ሸጠ','ሁኔታ','ተግባር']
+    : ['Date','Trader','Product','Qty','Total','Payment','Branch','By','Status','Action'];
 
   const rowsHtml = ws.length
     ? [...ws].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(function(w){
@@ -8083,9 +8127,10 @@ function renderWholesaleReportForOwner() {
           '<td>'+(br?br.name:w.branch)+'</td>'+
           '<td style="color:var(--white-dim)">'+((w.byName||w.by)||'—')+'</td>'+
           '<td><span style="font-size:10px;color:'+sc+';background:'+sc+'18;padding:2px 7px;border-radius:4px;border:1px solid '+sc+'44">'+sl+'</span></td>'+
+          '<td style="white-space:nowrap">'+editRecordBtn('wholesale',w.id)+requestDeleteBtn('wholesale',w.id)+'</td>'+
         '</tr>';
       }).join('')
-    : '<tr><td colspan="9" style="text-align:center;color:var(--white-dim);padding:20px">'+(lang==='am'?'ጅምላ ሽያጭ የለም':'No wholesale yet')+'</td></tr>';
+    : '<tr><td colspan="10" style="text-align:center;color:var(--white-dim);padding:20px">'+(lang==='am'?'ጅምላ ሽያጭ የለም':'No wholesale yet')+'</td></tr>';
 
   el.innerHTML =
     '<div class="card" style="padding:16px;margin-top:14px">'+
@@ -10162,7 +10207,7 @@ function toggleSewDetailTab() {
   if (arrow) arrow.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
 }
 
-// ── DATA CORRECTION & TRANSFER APPROVALS ─────────────────────────
+// ── DATA CORRECTION & OWNER APPROVAL SYSTEM (የመረጃ ማስተካከያ እና የኦነር ማፅደቂያ ስርዓት) ──
 
 function editRecordBtn(dataKey, id) {
   return `<button class="btn-outline" style="padding:2px 7px;font-size:10px;margin-right:4px;border-color:rgba(79,195,247,0.4);color:#4FC3F7;background:rgba(79,195,247,0.08);cursor:pointer;font-family:inherit" onclick="openCorrectionModal('${dataKey}','${id}')" title="${lang==='am'?'አስተካክል':'Edit'}">✏️ <span style="font-size:10px">${lang==='am'?'አስተካክል':'Edit'}</span></button>`;
@@ -10175,53 +10220,183 @@ function openCorrectionModal(dataKey, recordId) {
 
   const isOwner = currentUser.role === 'owner';
   const modalTitle = document.getElementById('correctionModalTitle');
+  const modMap = { sales:'🛍️ ሽያጭ', cutting:'✂️ ቆረጣ', cuttingDamage:'⚠️ ዳሜጅ', sewing:'🪡 ስፌት', store:'🏬 ዕቃ ቤት', storeTransfers:'🚚 ዝውውር', expenses:'📤 ወጪ', refunds:'🔄 ሪፈንድ', wholesale:'🏪 ጅምላ', customers:'👥 ደንበኞች', procurementOrders:'🧵 ግዢ' };
+  const modTitle = modMap[dataKey] || dataKey;
+
   if (modalTitle) {
-    modalTitle.textContent = isOwner 
-      ? (lang==='am' ? `✏️ መረጃ ቀጥታ አስተካክል (${dataKey})` : `✏️ Direct Edit Record (${dataKey})`)
-      : (lang==='am' ? `✏️ የመረጃ ማስተካከያ ጥያቄ (${dataKey})` : `✏️ Request Data Correction (${dataKey})`);
+    modalTitle.innerHTML = isOwner 
+      ? `✏️ ${lang==='am' ? `መረጃ በቀጥታ አስተካክል — ${modTitle}` : `Direct Edit Record — ${modTitle}`}`
+      : `✏️ ${lang==='am' ? `የመረጃ ማስተካከያ ጥያቄ — ${modTitle}` : `Request Data Correction — ${modTitle}`}`;
   }
 
   const fieldLabels = {
-    qty: lang==='am'?'ብዛት':'Quantity',
-    price: lang==='am'?'ዋጋ':'Price',
+    qty: lang==='am'?'ብዛት (ቁጥር)':'Quantity (pcs)',
+    price: lang==='am'?'ዋጋ (አንዱ)':'Unit Price',
+    total: lang==='am'?'አጠቃላይ ድምር':'Total Amount',
     product: lang==='am'?'ምርት':'Product',
-    type: lang==='am'?'አይነት':'Type',
+    type: lang==='am'?'የልብስ ዓይነት':'Garment Type',
     date: lang==='am'?'ቀን':'Date',
     worker: lang==='am'?'ሰራተኛ':'Worker',
+    tailor: lang==='am'?'ሰፊ':'Tailor',
     customer: lang==='am'?'ደንበኛ':'Customer',
+    customerName: lang==='am'?'የደንበኛ ስም':'Customer Name',
+    creditCustomer: lang==='am'?'የብድር ደንበኛ':'Credit Customer',
+    payment: lang==='am'?'የክፍያ ዓይነት':'Payment Method',
+    transferVia: lang==='am'?'ባንክ / ቻናል (CBE, Telebirr...)':'Transfer Via',
+    phone: lang==='am'?'ስልክ ቁጥር':'Phone Number',
     reason: lang==='am'?'ምክንያት':'Reason',
     note: lang==='am'?'ማስታወሻ':'Note',
-    fabric: lang==='am'?'ጨርቅ':'Fabric',
-    amount: lang==='am'?'መጠን':'Amount',
-    item: lang==='am'?'እቃ':'Item',
+    desc: lang==='am'?'ዝርዝር መግለጫ':'Description',
+    category: lang==='am'?'የወጪ ምድብ':'Expense Category',
+    fabric: lang==='am'?'የጨርቅ ዓይነት':'Fabric',
+    amount: lang==='am'?'መጠን (ብር)':'Amount',
+    cost: lang==='am'?'ጠቅላላ ወጪ (ብር)':'Total Cost',
+    item: lang==='am'?'የእቃ ስም':'Item Name',
+    unit: lang==='am'?'መለኪያ':'Unit',
+    carrier: lang==='am'?'አጓጓዥ / ሹፌር':'Carrier / Driver',
+    location: lang==='am'?'ቦታ / መደርደሪያ':'Location'
   };
 
-  const skipKeys = new Set(['id', 'createdAt', 'by', 'byName', 'branch', 'sentQty', 'status', 'isWholesale']);
+  const skipKeys = new Set(['id', 'createdAt', 'by', 'byName', 'branch', 'sentQty', 'status', 'isWholesale', 'receivedAt', 'approvedAt', 'approvedBy', 'storeDeducted', 'items', 'sentByName', 'receivedByName']);
   const editableKeys = Object.keys(target).filter(k => !skipKeys.has(k));
 
-  let fieldsHTML = editableKeys.map(k => {
+  let fieldsHTML = `
+    <!-- Current Info Badge -->
+    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:9px;padding:10px 12px;margin-bottom:14px">
+      <div style="font-size:10px;font-weight:700;color:rgba(197,203,216,0.5);letter-spacing:0.5px;margin-bottom:4px">
+        ${lang==='am'?'የተመረጠው መረጃ (አሁን ያለው)':'CURRENT RECORD DATA'}
+      </div>
+      <div style="font-size:12px;color:var(--white);display:flex;flex-wrap:wrap;gap:8px">
+        ${editableKeys.map(k => `<span style="background:rgba(0,0,0,0.3);padding:2px 7px;border-radius:4px"><span style="color:rgba(197,203,216,0.6)">${fieldLabels[k]||k}:</span> <b style="color:var(--gold)">${target[k]??'—'}</b></span>`).join('')}
+      </div>
+    </div>
+
+    <!-- Edit Form Inputs -->
+    <div style="display:flex;flex-direction:column;gap:10px">
+  `;
+
+  editableKeys.forEach(k => {
     const label = fieldLabels[k] || k;
     const val = target[k] ?? '';
     const isNum = typeof val === 'number';
-    return `<div style="margin-bottom:10px">
-      <label style="display:block;font-size:11px;color:rgba(197,203,216,0.6);font-weight:600;margin-bottom:3px">${label}</label>
-      <input type="${isNum?'number':'text'}" id="editField_${k}" class="form-input" value="${val}" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:var(--white);font-size:13px" />
-    </div>`;
-  }).join('');
 
-  fieldsHTML += `<div style="margin-bottom:12px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08)">
-    <label style="display:block;font-size:11px;color:#FFA726;font-weight:700;margin-bottom:3px">${lang==='am'?'የማስተካከያ ምክንያት *':'Reason for Correction *'}</label>
-    <input type="text" id="editCorrectionReason" class="form-input" placeholder="${lang==='am'?'ለምሳሌ: በስህተት የገባ ብዛት':'e.g. Quantity entered by mistake'}" style="width:100%;padding:8px 10px;background:rgba(255,167,38,0.06);border:1px solid rgba(255,167,38,0.3);border-radius:8px;color:var(--white);font-size:13px" />
-  </div>`;
+    if (k === 'payment') {
+      fieldsHTML += `<div>
+        <label style="display:block;font-size:11px;color:rgba(197,203,216,0.7);font-weight:600;margin-bottom:3px">${label}</label>
+        <select id="editField_${k}" class="form-input" style="width:100%;padding:8px 10px;background:#0f1420;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--white);font-size:12.5px">
+          <option value="cash" ${val==='cash'?'selected':''}>💵 ${lang==='am'?'ጥሬ ገንዘብ':'Cash'}</option>
+          <option value="transfer" ${val==='transfer'?'selected':''}>📲 ${lang==='am'?'የባንክ ዝውውር':'Bank Transfer'}</option>
+          <option value="credit" ${val==='credit'?'selected':''}>🤝 ${lang==='am'?'ብድር':'Credit'}</option>
+        </select>
+      </div>`;
+    } else if (k === 'date') {
+      fieldsHTML += `<div>
+        <label style="display:block;font-size:11px;color:rgba(197,203,216,0.7);font-weight:600;margin-bottom:3px">${label}</label>
+        <input type="date" id="editField_${k}" class="form-input" value="${val}" style="width:100%;padding:7px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--white);font-size:12.5px" />
+      </div>`;
+    } else {
+      fieldsHTML += `<div>
+        <label style="display:block;font-size:11px;color:rgba(197,203,216,0.7);font-weight:600;margin-bottom:3px">${label}</label>
+        <input type="${isNum?'number':'text'}" step="${isNum?'any':''}" min="${isNum?'0':''}" id="editField_${k}" class="form-input" value="${val}" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--white);font-size:13px" />
+      </div>`;
+    }
+  });
+
+  fieldsHTML += `</div>
+
+    <!-- Reason Input (Mandatory) -->
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
+      <label style="display:block;font-size:11.5px;color:#FFA726;font-weight:700;margin-bottom:4px">
+        ⚠️ ${lang==='am'?'የማስተካከያ ምክንያት * (ለምን ተሳሳተ?)':'Reason for Correction * (Why it was wrong?)'}
+      </label>
+      <input type="text" id="editCorrectionReason" class="form-input" placeholder="${lang==='am'?'ለምሳሌ፡ በስህተት 50 ተብሎ የተሞላ፣ ትክክለኛው 5 ነው':'e.g. Quantity 50 was entered by mistake instead of 5'}" style="width:100%;padding:8px 10px;background:rgba(255,167,38,0.08);border:1.5px solid rgba(255,167,38,0.4);border-radius:8px;color:var(--white);font-size:12.5px" />
+    </div>
+
+    <!-- Notice / Clarification -->
+    <div style="margin-top:12px;padding:9px 12px;border-radius:8px;background:${isOwner?'rgba(76,175,80,0.08)':'rgba(79,195,247,0.08)'};border:1px solid ${isOwner?'rgba(76,175,80,0.3)':'rgba(79,195,247,0.3)'};font-size:11px;color:${isOwner?'#80e080':'#90CAF9'}">
+      ${isOwner 
+        ? (lang==='am'?'⚡ እርስዎ ኦነር በመሆንዎ ይህ ማስተካከያ በቀጥታ በሲስተሙ ውስጥ ተግባራዊ ይሆናል።':'⚡ As the owner, this correction will take effect directly in the system.')
+        : (lang==='am'?'⏳ ይህ ማስተካከያ በቀጥታ ለኦነር ይላካል፤ ኦነሩ ሲያፀድቀው በሲስተሙ ውስጥ ይስተካከላል።':'⏳ This correction request will be sent to the owner and applied once approved.')}
+    </div>
+  `;
 
   document.getElementById('correctionModalBody').innerHTML = fieldsHTML;
 
   const btnSubmit = document.getElementById('btnSubmitCorrection');
   if (btnSubmit) {
+    btnSubmit.textContent = isOwner 
+      ? (lang==='am'?'💾 አስቀምጥ / አስተካክል':'💾 Save Changes') 
+      : (lang==='am'?'📤 ማስተካከያውን ለኦነር ላክ':'📤 Submit to Owner');
     btnSubmit.onclick = () => submitCorrection(dataKey, recordId, editableKeys);
   }
 
   openModal('correctionModal');
+}
+
+// ── Smart record & stock updater helper ───────────────────────────
+function applyRecordUpdate(dataKey, target, newVal) {
+  // 1. Sales quantity or product correction -> automatically update branch stock
+  if (dataKey === 'sales') {
+    const oldQty = Number(target.qty) || 0;
+    const newQty = Number(newVal.qty !== undefined ? newVal.qty : target.qty) || 0;
+    const oldProd = (target.product || '').trim();
+    const newProd = (newVal.product !== undefined ? newVal.product : target.product || '').trim();
+    const branch = target.branch;
+
+    if (branch) {
+      const bs = getData('branchStock');
+      if (oldProd && newProd && oldProd !== newProd) {
+        const oldRow = bs.find(x => x.branch === branch && (x.type || '').trim() === oldProd);
+        if (oldRow) oldRow.qty = Math.max(0, (Number(oldRow.qty) || 0) + oldQty);
+        const newRow = bs.find(x => x.branch === branch && (x.type || '').trim() === newProd);
+        if (newRow) newRow.qty = Math.max(0, (Number(newRow.qty) || 0) - newQty);
+        else bs.push({ id: uid(), branch, type: newProd, qty: Math.max(0, -newQty) });
+      } else if (oldQty !== newQty) {
+        const diff = oldQty - newQty;
+        const row = bs.find(x => x.branch === branch && (x.type || '').trim() === oldProd);
+        if (row) {
+          row.qty = Math.max(0, (Number(row.qty) || 0) + diff);
+        }
+      }
+      saveData('branchStock', bs);
+    }
+  }
+
+  // 2. Wholesale correction (if approved and qty or product changed)
+  if (dataKey === 'wholesale' && target.status === 'approved') {
+    const oldQty = Number(target.qty) || 0;
+    const newQty = Number(newVal.qty !== undefined ? newVal.qty : target.qty) || 0;
+    const oldProd = (target.product || '').trim();
+    const newProd = (newVal.product !== undefined ? newVal.product : target.product || '').trim();
+    const branch = target.branch;
+
+    if (branch) {
+      const bs = getData('branchStock');
+      if (oldProd && newProd && oldProd !== newProd) {
+        const oldRow = bs.find(x => x.branch === branch && (x.type || '').trim() === oldProd);
+        if (oldRow) oldRow.qty = Math.max(0, (Number(oldRow.qty) || 0) + oldQty);
+        const newRow = bs.find(x => x.branch === branch && (x.type || '').trim() === newProd);
+        if (newRow) newRow.qty = Math.max(0, (Number(newRow.qty) || 0) - newQty);
+      } else if (oldQty !== newQty) {
+        const diff = oldQty - newQty;
+        const row = bs.find(x => x.branch === branch && (x.type || '').trim() === oldProd);
+        if (row) row.qty = Math.max(0, (Number(row.qty) || 0) + diff);
+      }
+      saveData('branchStock', bs);
+    }
+  }
+
+  // 3. Auto-recalculate total if qty or price changed
+  if (('qty' in newVal || 'price' in newVal) && (target.total !== undefined || newVal.total !== undefined)) {
+    const finalQty = Number(newVal.qty !== undefined ? newVal.qty : target.qty) || 0;
+    const finalPrice = Number(newVal.price !== undefined ? newVal.price : target.price) || 0;
+    if (newVal.total === undefined && target.total !== undefined) {
+      newVal.total = finalQty * finalPrice;
+    }
+  }
+
+  // 4. Update the record
+  Object.assign(target, newVal);
 }
 
 function submitCorrection(dataKey, recordId, editableKeys) {
@@ -10247,13 +10422,32 @@ function submitCorrection(dataKey, recordId, editableKeys) {
   const isOwner = currentUser.role === 'owner';
 
   if (isOwner) {
-    Object.assign(target, newVal);
+    const oldSnapshot = { ...target };
+    applyRecordUpdate(dataKey, target, newVal);
     saveData(dataKey, records);
+
+    // Save audit history
+    const editHistory = getData('editHistory') || [];
+    editHistory.unshift({
+      id: uid(),
+      dataKey,
+      recordId,
+      oldVal: oldSnapshot,
+      newVal,
+      reason: reason || 'Direct Owner Edit',
+      requestedBy: currentUser.name || currentUser.username,
+      approvedBy: currentUser.name || currentUser.username,
+      approvedAt: new Date().toISOString()
+    });
+    saveData('editHistory', editHistory.slice(0, 200));
+
     closeModal('correctionModal');
     refreshActivePanel();
-    toast(lang==='am'?'✅ መረጃው ተስተካክሏል':'Record updated ✓');
+    renderDashboard();
+    buildSidebar();
+    toast(lang==='am'?'✅ መረጃው በቀጥታ ተስተካክሏል':'Record updated ✓');
   } else {
-    const pendingEdits = getData('pendingEdits');
+    const pendingEdits = getData('pendingEdits') || [];
     pendingEdits.push({
       id: uid(),
       dataKey,
@@ -10263,45 +10457,192 @@ function submitCorrection(dataKey, recordId, editableKeys) {
       reason,
       requestedBy: currentUser.name || currentUser.username,
       requestedByUsername: currentUser.username,
+      branch: target.branch || currentUser.branch || '',
       date: new Date().toISOString().slice(0, 10),
+      createdAt: new Date().toISOString(),
       status: 'pending'
     });
     saveData('pendingEdits', pendingEdits);
     closeModal('correctionModal');
-    toast(lang==='am'?'✅ የማስተካከያ ጥያቄ ተልኳል — ኦነሩ ያፀድቀዋል':'Correction request submitted — awaiting owner approval', 'warning');
+    renderDashboard();
+    buildSidebar();
+    toast(lang==='am'?'✅ የማስተካከያ ጥያቄው ለኦነር ተልኳል — ኦነሩ ሲያፀድቀው ይስተካከላል':'Correction request submitted — awaiting owner approval', 'warning');
   }
 }
 
 function approveEditRequest(pendingId) {
-  if (currentUser.role !== 'owner') return;
-  const pendingEdits = getData('pendingEdits');
+  if (currentUser.role !== 'owner') {
+    toast(lang==='am'?'⛔ ይህን ማድረግ የሚችለው ኦነር ብቻ ነው':'⛔ Only owner can approve', 'error');
+    return;
+  }
+  const pendingEdits = getData('pendingEdits') || [];
   const req = pendingEdits.find(e => e.id === pendingId);
   if (!req) return;
 
   const records = getData(req.dataKey);
   const target = records.find(r => r.id === req.recordId);
   if (target) {
-    Object.assign(target, req.newVal);
+    applyRecordUpdate(req.dataKey, target, req.newVal);
     saveData(req.dataKey, records);
   }
 
-  req.status = 'approved';
-  req.approvedBy = currentUser.username;
-  req.approvedAt = new Date().toISOString();
+  // Save audit history
+  const editHistory = getData('editHistory') || [];
+  editHistory.unshift({
+    id: uid(),
+    dataKey: req.dataKey,
+    recordId: req.recordId,
+    oldVal: req.oldVal,
+    newVal: req.newVal,
+    reason: req.reason,
+    requestedBy: req.requestedBy,
+    approvedBy: currentUser.name || currentUser.username,
+    approvedAt: new Date().toISOString()
+  });
+  saveData('editHistory', editHistory.slice(0, 200));
+
   saveData('pendingEdits', pendingEdits.filter(e => e.id !== pendingId));
 
   refreshActivePanel();
   renderDashboard();
-  toast(lang==='am'?'✅ የመረጃ ማስተካከያ ጥያቄው ፀድቋል':'Edit request approved ✓');
+  buildSidebar();
+  toast(lang==='am'?'✅ የመረጃ ማስተካከያ ጥያቄው ፀድቋል — በሲስተሙ ውስጥ ተስተካክሏል':'Edit request approved ✓ — records updated');
 }
 
 function rejectEditRequest(pendingId) {
   if (currentUser.role !== 'owner') return;
-  const pendingEdits = getData('pendingEdits');
+  const pendingEdits = getData('pendingEdits') || [];
   saveData('pendingEdits', pendingEdits.filter(e => e.id !== pendingId));
   refreshActivePanel();
   renderDashboard();
-  toast(lang==='am'?'❌ የማስተካከያ ጥያቄው ውድቅ ሆኗል':'Edit request rejected', 'warning');
+  buildSidebar();
+  toast(lang==='am'?'❌ የማስተካከያ ጥያቄው ውድቅ ተደርጓል':'Edit request rejected', 'warning');
+}
+
+// ── OWNER DEDICATED DATA CORRECTION APPROVALS & AUDIT LOG ─────────
+function renderOwnerCorrectionRequests(containerId) {
+  const targetId = containerId || 'ownerCorrectionsSection';
+  const container = document.getElementById(targetId);
+  if (!container) return;
+
+  if (currentUser.role !== 'owner') {
+    container.innerHTML = '';
+    return;
+  }
+
+  const pendingEdits = (getData('pendingEdits') || []).filter(e => e.status === 'pending');
+  const editHistory = getData('editHistory') || [];
+
+  const modMap = { sales:'🛍️ ሽያጭ', cutting:'✂️ ቆረጣ', cuttingDamage:'⚠️ ዳሜጅ', sewing:'🪡 ስፌት', store:'🏬 ዕቃ ቤት', storeTransfers:'🚚 ዝውውር', expenses:'📤 ወጪ', refunds:'🔄 ሪፈንድ', wholesale:'🏪 ጅምላ', customers:'👥 ደንበኞች', procurementOrders:'🧵 ግዢ' };
+  const fieldNames = { qty:'ብዛት', price:'ዋጋ', total:'ድምር', product:'ምርት', type:'ዓይነት', payment:'አከፋፈል', transferVia:'ቻናል', worker:'ሰራተኛ', customer:'ደንበኛ', amount:'መጠን', cost:'ወጪ', item:'እቃ', date:'ቀን' };
+
+  const pendingCardsHTML = pendingEdits.length ? pendingEdits.map(e => {
+    const modTitle = modMap[e.dataKey] || e.dataKey;
+    const diffItems = Object.entries(e.newVal || {}).map(([k, v]) => {
+      const fLabel = fieldNames[k] || k;
+      const oldV = e.oldVal ? (e.oldVal[k] ?? '—') : '—';
+      return `<div style="font-size:11.5px;background:rgba(0,0,0,0.3);padding:4px 9px;border-radius:6px;display:flex;align-items:center;gap:6px">
+        <span style="color:rgba(197,203,216,0.6)">${fLabel}:</span>
+        <span style="text-decoration:line-through;color:#FF9090;font-weight:600">${oldV}</span>
+        <span style="color:#80e080;font-weight:700">➔ ${v}</span>
+      </div>`;
+    }).join('');
+
+    return `
+      <div style="background:rgba(255,167,38,0.06);border:1.5px solid rgba(255,167,38,0.35);border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--gold);display:flex;align-items:center;gap:6px">
+              ${modTitle} · <span style="color:var(--white)">${e.reason || 'የስህተት ማስተካከያ'}</span>
+            </div>
+            <div style="font-size:11px;color:rgba(197,203,216,0.5);margin-top:2px">
+              👤 የጠየቀው፡ <b>${e.requestedBy || '—'}</b> · 📅 ${e.date || ''}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button onclick="approveEditRequest('${e.id}')" style="padding:5px 14px;border-radius:7px;border:1px solid rgba(76,175,80,0.5);background:rgba(76,175,80,0.15);color:#80e080;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">✅ ${lang==='am'?'አፅድቅ':'Approve'}</button>
+            <button onclick="rejectEditRequest('${e.id}')" style="padding:5px 12px;border-radius:7px;border:1px solid rgba(224,90,90,0.4);background:rgba(224,90,90,0.1);color:#FF9090;cursor:pointer;font-family:inherit;font-size:12px">❌ ${lang==='am'?'ውድቅ':'Reject'}</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:rgba(0,0,0,0.2);border-radius:7px">
+          ${diffItems}
+        </div>
+      </div>`;
+  }).join('') : `<div style="text-align:center;padding:16px;color:#80e080;font-size:12px;background:rgba(76,175,80,0.04);border-radius:8px">✅ ${lang==='am'?'ምንም በመጠባበቅ ላይ ያለ የመረጃ ማስተካከያ ጥያቄ የለም':'No pending data correction requests'}</div>`;
+
+  const historyRowsHTML = editHistory.slice(0, 15).map(h => {
+    const modTitle = modMap[h.dataKey] || h.dataKey;
+    const diffStr = Object.entries(h.newVal || {}).map(([k, v]) => {
+      const fLabel = fieldNames[k] || k;
+      const oldV = h.oldVal ? (h.oldVal[k] ?? '—') : '—';
+      return `${fLabel}: <span style="text-decoration:line-through;color:#FF9090">${oldV}</span> ➔ <b style="color:#80e080">${v}</b>`;
+    }).join(', ');
+    const timeStr = h.approvedAt ? h.approvedAt.slice(0, 16).replace('T', ' ') : '—';
+
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+      <td style="padding:6px 8px;white-space:nowrap;color:var(--white-dim);font-size:11px">${timeStr}</td>
+      <td style="padding:6px 8px;font-weight:600;color:var(--white);font-size:11.5px">${modTitle}</td>
+      <td style="padding:6px 8px;font-size:11px">${diffStr}</td>
+      <td style="padding:6px 8px;font-size:11px;color:rgba(197,203,216,0.6)">${h.reason || '—'}</td>
+      <td style="padding:6px 8px;font-size:11px;color:#80e080">${h.requestedBy || '—'} ➔ ${h.approvedBy || 'Owner'}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div style="background:rgba(255,255,255,0.02);border:1.5px solid rgba(255,167,38,0.3);border-radius:12px;padding:14px;margin-bottom:16px">
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:22px">✏️</span>
+          <div>
+            <h3 style="margin:0;color:#FFA726;font-size:15px;display:flex;align-items:center;gap:8px">
+              ${lang==='am'?'የመረጃ ማስተካከያ ማፅደቂያ እና ታሪክ':'Data Correction Approvals & History'}
+              ${pendingEdits.length ? `<span style="font-size:11.5px;font-weight:700;color:#FFA726;background:rgba(255,167,38,0.15);padding:2px 8px;border-radius:6px;border:1px solid rgba(255,167,38,0.3)">${pendingEdits.length} ${lang==='am'?'ጥያቄዎች':'requests'}</span>` : ''}
+            </h3>
+            <div style="font-size:11px;color:var(--white-dim);margin-top:2px">
+              ${lang==='am'?'በሰራተኞች በስህተት ተሞልተው እንዲስተካከሉ የተጠየቁ መረጃዎችን ያፅድቁ ወይም ውድቅ ያድርጉ':'Review, approve, or reject employee data correction requests with full change comparison'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pending Requests Cards -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;font-weight:700;color:rgba(197,203,216,0.6);letter-spacing:0.5px;margin-bottom:8px">
+          ⏳ ${lang==='am'?'በመጠባበቅ ላይ ያሉ ማስተካከያዎች':'PENDING CORRECTION REQUESTS'} (${pendingEdits.length})
+        </div>
+        ${pendingCardsHTML}
+      </div>
+
+      <!-- Audit History Collapsible -->
+      ${editHistory.length ? `
+      <div style="margin-top:14px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08)">
+        <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleAlertDetails('${targetId}_history')">
+          <span style="font-size:11px;font-weight:700;color:rgba(197,203,216,0.6);letter-spacing:0.5px">
+            📜 ${lang==='am'?'የተስተካከሉ መረጃዎች ታሪክ (Audit Log)':'CORRECTION AUDIT TRAIL'} (${editHistory.length})
+          </span>
+          <button style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:var(--white);padding:3px 8px;border-radius:6px;font-size:10.5px;cursor:pointer;font-family:inherit">
+            ${lang==='am'?'ዝርዝር ይመልከቱ ▾':'View history ▾'}
+          </button>
+        </div>
+        <div id="${targetId}_history" style="display:none;margin-top:10px;overflow-x:auto;max-height:220px">
+          <table style="width:100%;border-collapse:collapse;font-size:11.5px">
+            <thead>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.1);color:rgba(197,203,216,0.5);text-align:left">
+                <th style="padding:6px 8px">${lang==='am'?'ሰዓት':'Time'}</th>
+                <th style="padding:6px 8px">${lang==='am'?'ክፍል':'Module'}</th>
+                <th style="padding:6px 8px">${lang==='am'?'የተቀየረው መረጃ':'Change'}</th>
+                <th style="padding:6px 8px">${lang==='am'?'ምክንያት':'Reason'}</th>
+                <th style="padding:6px 8px">${lang==='am'?'ጠያቂ ➔ አፅዳቂ':'Requester ➔ Approver'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${historyRowsHTML}
+            </tbody>
+          </table>
+        </div>
+      </div>` : ''}
+    </div>`;
 }
 
 function approveProdFlowTransfer(id) {
